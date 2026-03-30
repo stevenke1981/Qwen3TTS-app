@@ -29,12 +29,20 @@ class AudioConfig:
 @dataclass
 class UIConfig:
     theme: str = "light"
-    window_size: tuple[int, int] = (1200, 800)
+    window_size: tuple[int, int] = (960, 640)
 
 
 @dataclass
 class HistoryConfig:
     max_entries: int = 100
+
+
+@dataclass
+class ASRConfig:
+    venv_asr_path: str = "venv-asr"
+    model_id: str = "Qwen/Qwen3-ASR-0.6B"
+    device: str = "cpu"
+    timestamps: bool = True
 
 
 @dataclass
@@ -44,6 +52,7 @@ class Config:
     audio: AudioConfig = field(default_factory=AudioConfig)
     ui: UIConfig = field(default_factory=UIConfig)
     history: HistoryConfig = field(default_factory=HistoryConfig)
+    asr: ASRConfig = field(default_factory=ASRConfig)
 
     @classmethod
     def from_yaml(cls, path: str | Path) -> "Config":
@@ -53,11 +62,12 @@ class Config:
 
     @classmethod
     def _from_dict(cls, data: dict[str, Any]) -> "Config":
-        api_data = data.get("api", {})
-        ollama_data = data.get("ollama", {})
-        audio_data = data.get("audio", {})
-        ui_data = data.get("ui", {})
+        api_data     = data.get("api", {})
+        ollama_data  = data.get("ollama", {})
+        audio_data   = data.get("audio", {})
+        ui_data      = data.get("ui", {})
         history_data = data.get("history", {})
+        asr_data     = data.get("asr", {})
 
         return cls(
             api=APIConfig(
@@ -72,9 +82,15 @@ class Config:
             audio=AudioConfig(**audio_data),
             ui=UIConfig(
                 theme=ui_data.get("theme", "light"),
-                window_size=tuple(ui_data.get("window_size", [1200, 800])),
+                window_size=tuple(ui_data.get("window_size", [960, 640])),
             ),
             history=HistoryConfig(**history_data),
+            asr=ASRConfig(
+                venv_asr_path=asr_data.get("venv_asr_path", "venv-asr"),
+                model_id=asr_data.get("model_id", "Qwen/Qwen3-ASR-0.6B"),
+                device=asr_data.get("device", "cpu"),
+                timestamps=asr_data.get("timestamps", True),
+            ),
         )
 
     def to_yaml(self, path: str | Path) -> None:
@@ -98,6 +114,12 @@ class Config:
             },
             "history": {
                 "max_entries": self.history.max_entries,
+            },
+            "asr": {
+                "venv_asr_path": self.asr.venv_asr_path,
+                "model_id": self.asr.model_id,
+                "device": self.asr.device,
+                "timestamps": self.asr.timestamps,
             },
         }
         with open(path, "w", encoding="utf-8") as f:

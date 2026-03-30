@@ -13,7 +13,13 @@ audio:
 
 ui:
   theme: "light"
-  window_size: [1200, 800]
+  window_size: [960, 640]
 
 history:
   max_entries: 100
+
+asr:
+  venv_asr_path: "venv-asr"
+  model_id: "Qwen/Qwen3-ASR-0.6B"
+  device: "cpu"
+  timestamps: true

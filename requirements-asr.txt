@@ -1,0 +1,19 @@
+# Dependencies for the venv-asr virtual environment
+# Install with:  pip install -r requirements-asr.txt
+# (Keep separate from requirements.txt to avoid transformers version conflicts)
+
+# Core ASR — installs transformers 4.57.6 + required audio deps
+qwen-asr>=0.1.0
+
+# YouTube / online audio download
+yt-dlp>=2024.8.1
+
+# Audio I/O (ffmpeg via yt-dlp for download; soundfile for local files)
+soundfile>=0.12.1
+
+# Numeric / tensor
+numpy>=1.26.0
+
+# PyTorch — CPU wheel (smaller); override with GPU wheel when needed:
+#   pip install torch --index-url https://download.pytorch.org/whl/cu121
+torch>=2.3.0

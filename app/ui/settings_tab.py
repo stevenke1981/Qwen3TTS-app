@@ -17,6 +17,7 @@ from PySide6.QtWidgets import (
 )
 
 from ..core.config import Config
+from .theme import make_secondary_button
 
 
 class SettingsTab(QWidget):
@@ -88,19 +89,25 @@ class SettingsTab(QWidget):
         layout.addStretch()
 
         button_layout = QHBoxLayout()
-        self.test_qwen3_btn = QPushButton("測試 Qwen3 連線")
+        self.test_qwen3_btn = QPushButton("🔌  測試 Qwen3 連線")
         self.test_qwen3_btn.clicked.connect(self._on_test_qwen3)
+        self.test_qwen3_btn.setToolTip("測試 Qwen3-TTS API 連線狀態")
+        make_secondary_button(self.test_qwen3_btn)
         button_layout.addWidget(self.test_qwen3_btn)
 
-        self.test_ollama_btn = QPushButton("測試 Ollama 連線")
+        self.test_ollama_btn = QPushButton("🔌  測試 Ollama 連線")
         self.test_ollama_btn.clicked.connect(self._on_test_ollama)
+        self.test_ollama_btn.setToolTip("測試 Ollama 連線狀態並列出可用模型")
+        make_secondary_button(self.test_ollama_btn)
         button_layout.addWidget(self.test_ollama_btn)
 
         layout.addLayout(button_layout)
 
         save_layout = QHBoxLayout()
-        self.save_btn = QPushButton("儲存設定")
+        self.save_btn = QPushButton("💾  儲存設定")
         self.save_btn.clicked.connect(self._on_save)
+        self.save_btn.setToolTip("將目前設定儲存到 config.yaml")
+        save_layout.addStretch()
         save_layout.addWidget(self.save_btn)
 
         layout.addLayout(save_layout)
