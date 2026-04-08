@@ -23,8 +23,11 @@ from PySide6.QtWidgets import (
 from ..audio.exporter import AudioExporter
 from ..audio.player import AudioPlayer
 from ..core.drafts import load_drafts, save_drafts
+from ..core.duration_estimator import estimate_duration, format_duration
 from ..core.history import HistoryEntry
 from ..core.presets import VoicePreset, load_presets, save_custom_preset
+from ..core.recent_texts import add_recent, load_recent
+from ..core.ssml import SSML_TAGS, strip_ssml
 from .theme import make_secondary_button
 from .waveform_widget import WaveformWidget
 
@@ -88,6 +91,7 @@ class TextTab(QWidget):
         self._pending_text: str = ""
         self._batch_results: list[tuple[str, bytes]] = []
 
+        self._previous_audio: bytes | None = None  # A/B compare: previous result
         self.setAcceptDrops(True)
         self._setup_ui()
         self._load_presets()
@@ -110,12 +114,34 @@ class TextTab(QWidget):
         self.text_input.textChanged.connect(self._on_text_changed)
         input_layout.addWidget(self.text_input)
 
-        # Character count hint row
+        # ── Recent-texts + SSML toolbar row ──
+        toolbar_row = QHBoxLayout()
+        toolbar_row.setContentsMargins(0, 0, 0, 0)
+        self.recent_combo = QComboBox()
+        self.recent_combo.setPlaceholderText("最近文字")
+        self.recent_combo.setMinimumWidth(160)
+        self.recent_combo.activated.connect(self._on_recent_selected)
+        toolbar_row.addWidget(self.recent_combo)
+        toolbar_row.addSpacing(8)
+        for tag in SSML_TAGS[:4]:  # break, emphasis, prosody, phoneme
+            btn = QPushButton(tag.label)
+            btn.setToolTip(tag.description)
+            btn.setMaximumWidth(70)
+            btn.clicked.connect(lambda _=False, tpl=tag.template: self._insert_ssml(tpl))
+            make_secondary_button(btn)
+            toolbar_row.addWidget(btn)
+        toolbar_row.addStretch()
+        input_layout.addLayout(toolbar_row)
+
+        # Character count + duration hint row
         hint_row = QHBoxLayout()
         hint_row.setContentsMargins(0, 0, 0, 0)
         self.char_count_label = QLabel("0 字")
         self.char_count_label.setProperty("muted", "true")
         self.char_count_label.setToolTip("目前輸入的字元數")
+        self.duration_label = QLabel("")
+        self.duration_label.setProperty("muted", "true")
+        hint_row.addWidget(self.duration_label)
         hint_row.addStretch()
         hint_row.addWidget(self.char_count_label)
         input_layout.addLayout(hint_row)
@@ -209,6 +235,23 @@ class TextTab(QWidget):
 
         layout.addLayout(button_layout)
 
+        # ── A/B compare row ──
+        ab_row = QHBoxLayout()
+        ab_row.setContentsMargins(0, 0, 0, 0)
+        self.ab_a_btn = QPushButton("🅰 上次")
+        self.ab_a_btn.clicked.connect(self._play_a)
+        self.ab_a_btn.setEnabled(False)
+        make_secondary_button(self.ab_a_btn)
+        self.ab_b_btn = QPushButton("🅱 本次")
+        self.ab_b_btn.clicked.connect(self._play_b)
+        self.ab_b_btn.setEnabled(False)
+        make_secondary_button(self.ab_b_btn)
+        ab_row.addWidget(QLabel("A/B 比較："))
+        ab_row.addWidget(self.ab_a_btn)
+        ab_row.addWidget(self.ab_b_btn)
+        ab_row.addStretch()
+        layout.addLayout(ab_row)
+
         # Keyboard shortcuts
         QShortcut(QKeySequence("Ctrl+Return"), self).activated.connect(self._on_synthesize)
         QShortcut(QKeySequence("Ctrl+S"), self).activated.connect(self._on_export)
@@ -248,7 +291,16 @@ class TextTab(QWidget):
         self._thread.start()
 
     def _on_synthesis_done(self, audio_data: bytes):
+        # A/B compare: push previous result
+        if self.current_audio is not None:
+            self._previous_audio = self.current_audio
+            self.ab_a_btn.setEnabled(True)
         self.current_audio = audio_data
+        self.ab_b_btn.setEnabled(True)
+
+        # Save to recent-texts queue
+        add_recent(self._pending_text)
+        self._refresh_recent_combo()
 
         entry = HistoryEntry(
             id=self.history_manager.generate_id(),
@@ -278,10 +330,15 @@ class TextTab(QWidget):
 
     def _on_text_changed(self):
         text = self.text_input.toPlainText()
-        chars = len(text)
-        lines = text.count("\n") + 1 if text else 0
-        words = len(text.split()) if text.strip() else 0
+        plain = strip_ssml(text)
+        chars = len(plain)
+        lines = plain.count("\n") + 1 if plain else 0
+        words = len(plain.split()) if plain.strip() else 0
         self.char_count_label.setText(f"{chars} 字 | {lines} 行 | ~{words} 詞")
+        # Duration estimate
+        speed = self.speed_slider.value() / 100
+        dur = estimate_duration(plain, speed)
+        self.duration_label.setText(f"預估時長：{format_duration(dur)}" if dur > 0 else "")
         # Restart auto-save timer
         if hasattr(self, "_draft_timer"):
             self._draft_timer.start()
@@ -303,12 +360,18 @@ class TextTab(QWidget):
         if not self.current_audio:
             return
 
-        path, _ = QFileDialog.getSaveFileName(
-            self, "匯出音訊", "", "WAV 音訊 (*.wav);;所有檔案 (*.*)"
+        path, selected_filter = QFileDialog.getSaveFileName(
+            self,
+            "匯出音訊",
+            "",
+            "WAV 音訊 (*.wav);;MP3 音訊 (*.mp3);;所有檔案 (*.*)",
         )
         if path:
             try:
-                AudioExporter.to_wav(self.current_audio, path)
+                if selected_filter == "MP3 音訊 (*.mp3)" or path.lower().endswith(".mp3"):
+                    AudioExporter.to_mp3(self.current_audio, path)
+                else:
+                    AudioExporter.to_wav(self.current_audio, path)
                 QMessageBox.information(self, "成功", f"已匯出至：{path}")
             except Exception as e:
                 QMessageBox.critical(self, "錯誤", f"匯出失敗：{str(e)}")
@@ -389,9 +452,7 @@ class TextTab(QWidget):
         self._batch_worker = _BatchTTSWorker(self.api_client, paragraphs, config)
         self._batch_worker.moveToThread(self._thread)
         self._thread.started.connect(self._batch_worker.run)
-        self._batch_worker.progress.connect(
-            lambda cur, total: self.progress_bar.setValue(cur)
-        )
+        self._batch_worker.progress.connect(self._on_batch_progress)
         self._batch_worker.finished.connect(self._on_batch_done)
         self._batch_worker.error.connect(self._on_batch_error)
         self._batch_worker.finished.connect(self._thread.quit)
@@ -405,6 +466,15 @@ class TextTab(QWidget):
         for i, (text, audio) in enumerate(results):
             fname = os.path.join(self._batch_out_dir, f"part_{i + 1:03d}.wav")
             AudioExporter.to_wav(audio, fname)
+
+        # Auto-concatenate all chunks into one file
+        chunks = [audio for _, audio in results]
+        concat_path = os.path.join(self._batch_out_dir, "all_concat.wav")
+        try:
+            from ..audio.concatenator import concatenate_to_file
+            concatenate_to_file(chunks, concat_path, gap_ms=300)
+        except Exception:
+            pass  # non-critical
 
         self.synthesize_btn.setEnabled(True)
         self.batch_btn.setEnabled(True)
@@ -452,5 +522,49 @@ class TextTab(QWidget):
     def _restore_draft(self):
         drafts = load_drafts()
         text = drafts.get("text_tab", "")
+        if text:
+            self.text_input.setPlainText(text)
+        self._refresh_recent_combo()
+
+    # ── Batch progress percentage ──
+
+    def _on_batch_progress(self, current: int, total: int):
+        self.progress_bar.setValue(current)
+        pct = int(current / total * 100) if total else 0
+        self.progress_bar.setFormat(f"{current}/{total}  ({pct}%)")
+
+    # ── A/B compare helpers ──
+
+    def _play_a(self):
+        if self._previous_audio:
+            self.audio_player.play(self._previous_audio)
+
+    def _play_b(self):
+        if self.current_audio:
+            self.audio_player.play(self.current_audio)
+
+    # ── SSML insert ──
+
+    def _insert_ssml(self, template: str):
+        cursor = self.text_input.textCursor()
+        selected = cursor.selectedText()
+        if selected:
+            text = template.replace("{text}", selected)
+        else:
+            text = template
+        cursor.insertText(text)
+
+    # ── Recent texts ──
+
+    def _refresh_recent_combo(self):
+        self.recent_combo.blockSignals(True)
+        self.recent_combo.clear()
+        for item in load_recent():
+            display = item[:40] + "…" if len(item) > 40 else item
+            self.recent_combo.addItem(display, userData=item)
+        self.recent_combo.blockSignals(False)
+
+    def _on_recent_selected(self, index: int):
+        text = self.recent_combo.itemData(index)
         if text:
             self.text_input.setPlainText(text)

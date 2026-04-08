@@ -1,36 +1,47 @@
 # Qwen3-TTS Desktop
 
-桌面版語音合成應用程式，基於 [Qwen3-TTS](https://github.com/QwenLM/Qwen3) 模型，提供文字轉語音、語音克隆、潤稿翻譯等功能。
+桌面版語音合成應用程式，基於 [Qwen3-TTS](https://github.com/QwenLM/Qwen3) 模型，提供文字轉語音、語音克隆、潤稿翻譯、語音辨識等功能。
 
 ## 功能
 
 | 分頁 | 功能 |
 |------|------|
-| 文字合成 | 文字 → 語音，可調整語速 / 音調 / 音量，支援匯出 WAV |
+| 文字合成 | 文字 → 語音，可調整語速 / 音調 / 音量，SSML 標記，批次合成，波形視覺化 |
 | 語音克隆 | 以文字或音檔參考克隆音色後合成 |
-| 潤稿翻譯 | 使用本地 Ollama 模型潤稿、翻譯、繁簡轉換 |
+| 潤稿翻譯 | 使用本地 LLM 潤稿、翻譯、繁簡轉換（Ollama / OpenAI / FastAPI） |
+| 語音辨識 | Qwen3-ASR 本地 / API 模式，支援 20+ 語言，SRT/VTT 匯出 |
 | 歷史記錄 | 瀏覽、重跑、刪除歷史合成記錄 |
-| 設定 | 設定 API URL / Ollama 模型 / 視窗大小 |
+| 設定 | TTS / LLM / ASR / UI 統一設定，匯出/匯入設定檔 |
 
 ## 系統需求
 
 - Python 3.10+
-- [Qwen3-TTS API server](https://github.com/QwenLM/Qwen3) 執行於 `localhost:8000`
+- [Qwen3-TTS API server](https://github.com/QwenLM/Qwen3) 執行於 `localhost:8000`（本地模型或遠端 API）
 - [Ollama](https://ollama.ai)（選用，潤稿翻譯功能）
 
 ## 快速開始
 
-### Windows
-
-```bat
-start.bat
-```
-
-### macOS / Linux
+### 跨平台（Python）
 
 ```bash
-chmod +x start.sh
-./start.sh
+# 首次啟動（建立環境 + 安裝依賴 + 啟動）
+python scripts/start.py --setup
+
+# 一般啟動
+python scripts/start.py
+
+# 只檢查服務連線
+python scripts/start.py --check
+```
+
+### 環境管理
+
+```bash
+python scripts/setup.py app          # 主 GUI 環境
+python scripts/setup.py tts          # TTS 模型伺服器環境
+python scripts/setup.py asr          # ASR 模型環境
+python scripts/setup.py llm          # LLM 模型伺服器環境
+python scripts/setup.py all          # 全部環境
 ```
 
 ### 手動安裝

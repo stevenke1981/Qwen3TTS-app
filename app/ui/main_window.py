@@ -17,6 +17,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from ..core.app_logger import read_log_tail
 from .asr_tab import ASRTab
 from .clone_tab import CloneTab
 from .edit_tab import EditTab
@@ -221,6 +222,8 @@ class MainWindow(QtWidgets.QMainWindow):
         QShortcut(QKeySequence("F5"), self).activated.connect(self._probe_connections)
         # F1 → shortcut overlay
         QShortcut(QKeySequence("F1"), self).activated.connect(self._show_shortcuts_dialog)
+        # F12 → log viewer
+        QShortcut(QKeySequence("F12"), self).activated.connect(self._show_log_viewer)
         # Ctrl+Q → quit
         QShortcut(QKeySequence("Ctrl+Q"), self).activated.connect(self._real_quit)
 
@@ -245,6 +248,7 @@ class MainWindow(QtWidgets.QMainWindow):
             "<tr><td><b>Ctrl+,</b></td><td>設定</td></tr>"
             "<tr><td><b>F5</b></td><td>重新偵測連線</td></tr>"
             "<tr><td><b>F1</b></td><td>顯示此快捷鍵一覽</td></tr>"
+            "<tr><td><b>F12</b></td><td>檢視應用程式日誌</td></tr>"
             "<tr><td><b>Ctrl+Q</b></td><td>完全退出</td></tr>"
             "</table>"
             "<h3>文字合成</h3>"
@@ -323,3 +327,16 @@ class MainWindow(QtWidgets.QMainWindow):
 
     def show_info(self, title: str, message: str):
         QMessageBox.information(self, title, message)
+
+    def _show_log_viewer(self):
+        """Open a dialog showing recent application log entries."""
+        dlg = QDialog(self)
+        dlg.setWindowTitle("應用程式日誌")
+        dlg.setMinimumSize(680, 480)
+        layout = QVBoxLayout(dlg)
+        log_text = QTextEdit()
+        log_text.setReadOnly(True)
+        log_text.setFontFamily("Consolas")
+        log_text.setPlainText(read_log_tail(300))
+        layout.addWidget(log_text)
+        dlg.exec()

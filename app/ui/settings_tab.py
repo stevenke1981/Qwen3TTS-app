@@ -3,6 +3,7 @@
 from PySide6.QtWidgets import (
     QCheckBox,
     QComboBox,
+    QFileDialog,
     QFormLayout,
     QGroupBox,
     QHBoxLayout,
@@ -144,6 +145,19 @@ class SettingsTab(QWidget):
         layout.addLayout(button_layout)
 
         save_layout = QHBoxLayout()
+        self.export_config_btn = QPushButton("📤  匯出設定")
+        self.export_config_btn.clicked.connect(self._on_export_config)
+        self.export_config_btn.setToolTip("匯出目前設定到 YAML 檔案")
+        make_secondary_button(self.export_config_btn)
+        save_layout.addWidget(self.export_config_btn)
+
+        self.import_config_btn = QPushButton("📥  匯入設定")
+        self.import_config_btn.clicked.connect(self._on_import_config)
+        self.import_config_btn.setToolTip("從 YAML 檔案匯入設定")
+        make_secondary_button(self.import_config_btn)
+        save_layout.addWidget(self.import_config_btn)
+
+        save_layout.addStretch()
         self.save_btn = QPushButton("💾  儲存設定")
         self.save_btn.clicked.connect(self._on_save)
         self.save_btn.setToolTip("將目前設定儲存到 config.yaml")
@@ -249,3 +263,47 @@ class SettingsTab(QWidget):
         from pathlib import Path
 
         return Path(__file__).parent.parent.parent / "config.yaml"
+
+    def _on_export_config(self):
+        path, _ = QFileDialog.getSaveFileName(
+            self, "匯出設定", "config_backup.yaml", "YAML (*.yaml *.yml);;所有檔案 (*.*)"
+        )
+        if not path:
+            return
+        try:
+            self.config.to_yaml(path)
+            QMessageBox.information(self, "成功", f"設定已匯出至：{path}")
+        except Exception as e:
+            QMessageBox.critical(self, "錯誤", f"匯出失敗：{e}")
+
+    def _on_import_config(self):
+        path, _ = QFileDialog.getOpenFileName(
+            self, "匯入設定", "", "YAML (*.yaml *.yml);;所有檔案 (*.*)"
+        )
+        if not path:
+            return
+        try:
+            from ..core.config import Config
+
+            new_cfg = Config.from_yaml(path)
+            # Apply to in-memory config
+            self.config.api = new_cfg.api
+            self.config.llm = new_cfg.llm
+            self.config.asr = new_cfg.asr
+            self.config.audio = new_cfg.audio
+            self.config.ui = new_cfg.ui
+            # Refresh widgets to reflect imported values
+            self.url_input.setText(self.config.api.qwen3_base_url)
+            self.timeout_spin.setValue(self.config.api.qwen3_timeout)
+            self.verify_ssl_cb.setChecked(self.config.api.verify_ssl)
+            idx = self.llm_provider_combo.findText(self.config.llm.provider)
+            if idx >= 0:
+                self.llm_provider_combo.setCurrentIndex(idx)
+            self.llm_url_input.setText(self.config.llm.base_url)
+            self.llm_api_key_input.setText(self.config.llm.api_key)
+            self.llm_model_input.setText(self.config.llm.model)
+            self.width_spin.setValue(self.config.ui.window_size[0])
+            self.height_spin.setValue(self.config.ui.window_size[1])
+            QMessageBox.information(self, "成功", f"已匯入設定：{path}\n請按「儲存設定」以保留。")
+        except Exception as e:
+            QMessageBox.critical(self, "錯誤", f"匯入失敗：{e}")

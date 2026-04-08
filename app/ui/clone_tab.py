@@ -320,12 +320,18 @@ class CloneTab(QWidget):
         if not self.current_audio:
             return
 
-        path, _ = QFileDialog.getSaveFileName(
-            self, "匯出音訊", "", "WAV 音訊 (*.wav);;所有檔案 (*.*)"
+        path, selected_filter = QFileDialog.getSaveFileName(
+            self,
+            "匯出音訊",
+            "",
+            "WAV 音訊 (*.wav);;MP3 音訊 (*.mp3);;所有檔案 (*.*)",
         )
         if path:
             try:
-                AudioExporter.to_wav(self.current_audio, path)
+                if selected_filter == "MP3 音訊 (*.mp3)" or path.lower().endswith(".mp3"):
+                    AudioExporter.to_mp3(self.current_audio, path)
+                else:
+                    AudioExporter.to_wav(self.current_audio, path)
                 QMessageBox.information(self, "成功", f"已匯出至：{path}")
             except Exception as e:
                 QMessageBox.critical(self, "錯誤", f"匯出失敗：{str(e)}")

@@ -1,6 +1,6 @@
 [project]
 name = "qwen3-tts-app"
-version = "0.2.0"
+version = "0.3.0"
 description = "Qwen3-TTS Desktop — 語音合成桌面應用程式"
 requires-python = ">=3.10"
 

@@ -354,14 +354,20 @@ Qwen3TTS-app/
 │   ├── audio/
 │   │   ├── __init__.py
 │   │   ├── player.py            # QMediaPlayer 封裝
-│   │   └── exporter.py          # WAV/MP3 匯出
+│   │   ├── exporter.py          # WAV/MP3 匯出
+│   │   └── concatenator.py      # 多段音訊拼接（v0.3.0）
 │   └── core/
 │       ├── __init__.py
 │       ├── config.py            # Dataclass 設定管理（YAML）
 │       ├── history.py           # 歷史記錄管理（YAML）
 │       ├── presets.py           # 語音預設管理
 │       ├── drafts.py            # 草稿自動存取
-│       └── chinese_converter.py # 簡繁轉換（opencc）
+│       ├── chinese_converter.py # 簡繁轉換（opencc）
+│       ├── ssml.py              # SSML 標記輔助函式（v0.3.0）
+│       ├── duration_estimator.py # 即時時長預估（v0.3.0）
+│       ├── recent_texts.py      # 最近使用文字佇列（v0.3.0）
+│       ├── i18n.py              # 多語言 UI 字串表（v0.3.0）
+│       └── app_logger.py        # 結構化日誌（v0.3.0）
 ├── scripts/
 │   ├── asr_worker.py            # ASR subprocess worker（venv-asr 下執行）
 │   ├── tts_server.py            # Qwen3-TTS FastAPI 伺服器（venv-tts 下執行）
@@ -387,7 +393,13 @@ Qwen3TTS-app/
 │   ├── test_presets.py
 │   ├── test_drafts.py
 │   ├── test_history.py
-│   └── test_chinese_converter.py
+│   ├── test_chinese_converter.py
+│   ├── test_ssml.py             # SSML 標記測試（v0.3.0）
+│   ├── test_concatenator.py     # 音訊拼接測試（v0.3.0）
+│   ├── test_duration_estimator.py # 時長預估測試（v0.3.0）
+│   ├── test_recent_texts.py     # 最近文字測試（v0.3.0）
+│   ├── test_i18n.py             # 多語言測試（v0.3.0）
+│   └── test_app_logger.py       # 日誌測試（v0.3.0）
 ├── venv/                        # 主 GUI 虛擬環境（git 忽略）
 ├── venv-asr/                    # ASR 虛擬環境（git 忽略）
 ├── venv-tts/                    # TTS 虛擬環境（git 忽略）
@@ -399,11 +411,7 @@ Qwen3TTS-app/
 ├── config.yaml                  # 執行期設定（git 忽略）
 ├── config.example.yaml          # 設定範本
 ├── pyproject.toml               # ruff + pytest 配置
-├── start.bat / start.sh         # GUI 啟動腳本
-├── setup_asr.bat / setup_asr.sh # ASR 環境建立 + 安裝
-├── setup-tts.bat / setup-tts.sh # TTS 環境建立 + 啟動伺服器
-├── setup_llm.bat                # LLM 環境建立 + 啟動伺服器
-├── download_models.bat          # 模型下載（全部 / 分群組）
+├── plan.md                      # 版本實作計畫
 ├── SPEC.md
 └── README.md
 ```
@@ -498,6 +506,30 @@ Qwen3TTS-app/
 | pytest 測試 | 52 tests（config, presets, drafts, history, chinese_converter） |
 | B904 修復 | 所有 `raise` 改為 `raise ... from exc` |
 | Signal 修正 | EditTab Signal 宣告移至 class 頂層 |
+
+### v0.3.0 新增功能
+
+| 功能 | 狀態 | 模組 | 說明 |
+|------|------|------|------|
+| SSML 標記編輯器 | ✅ | `app/core/ssml.py` | 工具列插入 break/emphasis/prosody/phoneme 標記 |
+| 音訊拼接器 | ✅ | `app/audio/concatenator.py` | 批次合成後自動拼接為單一 WAV |
+| 即時時長預估 | ✅ | `app/core/duration_estimator.py` | 根據字數與語速即時預估合成時長 |
+| 匯出格式選擇器 | ✅ | TextTab / CloneTab | 匯出支援 WAV / MP3 格式選擇 |
+| 最近使用文字 | ✅ | `app/core/recent_texts.py` | 記錄最近 20 筆合成文字，一鍵載入 |
+| A/B 比較播放 | ✅ | TextTab | 保留前次結果，A/B 切換比較 |
+| 批次進度百分比 | ✅ | TextTab | 顯示 N/M (pct%) 確定進度 |
+| 多語言 UI 框架 | ✅ | `app/core/i18n.py` | zh-TW / en 字串表，~90 鍵，t() 函式 |
+| 組態匯出/匯入 | ✅ | SettingsTab | 匯出 / 匯入 YAML 設定檔 |
+| 日誌檢視器 | ✅ | `app/core/app_logger.py` | RotatingFileHandler + F12 檢視面板 |
+
+### v0.3.0 品質改善
+
+| 項目 | 說明 |
+|------|------|
+| ruff linting | 全部通過 |
+| pytest 測試 | 99 passed, 1 skipped（11 個測試檔） |
+| 移除 bat/sh 腳本 | 統一使用 `scripts/setup.py` / `scripts/start.py` |
+| 預設本地部署 | 所有 config 預設指向 localhost |
 | Config.from_yaml | 修復空 YAML 檔案 `NoneType` 錯誤 |
 
 ---
