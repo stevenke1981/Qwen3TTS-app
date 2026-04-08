@@ -1,0 +1,33 @@
+[project]
+name = "qwen3-tts-app"
+version = "0.2.0"
+description = "Qwen3-TTS Desktop — 語音合成桌面應用程式"
+requires-python = ">=3.10"
+
+[tool.ruff]
+target-version = "py310"
+line-length = 100
+src = ["app", "scripts"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "N", "UP", "B", "A", "SIM"]
+ignore = [
+    "E501",   # line too long (handled by formatter)
+    "E402",   # module-import-not-at-top (lazy imports in Qt workers)
+    "N802",   # Qt overrides (camelCase)
+    "N803",   # Qt argument names
+    "N806",   # variable in function should be lowercase
+    "B007",   # unused loop variable (Qt pattern: `for _ in ...`)
+    "B008",   # function call in default arg (Qt patterns)
+    "B905",   # zip without strict (fixed-length tuples)
+    "SIM105", # contextlib.suppress preference
+    "SIM108", # ternary operator
+]
+
+[tool.ruff.lint.isort]
+known-first-party = ["app"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+addopts = "-v --tb=short"

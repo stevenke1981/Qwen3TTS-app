@@ -9,14 +9,14 @@ _PROJECT_ROOT = Path(__file__).parent.parent
 if str(_PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(_PROJECT_ROOT))
 
-from PySide6.QtWidgets import QApplication, QMessageBox
 from PySide6.QtCore import QSharedMemory
+from PySide6.QtWidgets import QApplication, QMessageBox
 
-from app.core.config import Config
-from app.api.qwen3_client import Qwen3Client
-from app.api.ollama_client import OllamaClient
-from app.api.llm_client import LLMClient
 from app.api.asr_client import ASRClient
+from app.api.llm_client import LLMClient
+from app.api.ollama_client import OllamaClient
+from app.api.qwen3_client import Qwen3Client
+from app.core.config import Config
 from app.core.history import HistoryManager
 from app.ui.main_window import MainWindow
 from app.ui.theme import apply_theme

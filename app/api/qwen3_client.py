@@ -1,13 +1,12 @@
 """Qwen3-TTS API Client"""
 
 import base64
-import io
 from dataclasses import dataclass
 from typing import BinaryIO
 
 import requests
 
-from .exceptions import APIError, TTSError, VoiceCloneError
+from .exceptions import TTSError, VoiceCloneError
 
 
 @dataclass
@@ -56,10 +55,10 @@ class Qwen3Client:
             )
             response.raise_for_status()
             return response.content
-        except requests.exceptions.Timeout:
-            raise TTSError("Request timed out", status_code=408)
+        except requests.exceptions.Timeout as exc:
+            raise TTSError("Request timed out", status_code=408) from exc
         except requests.exceptions.RequestException as e:
-            raise TTSError(f"Request failed: {e}")
+            raise TTSError(f"Request failed: {e}") from e
 
     def clone_from_text(
         self,
@@ -92,10 +91,10 @@ class Qwen3Client:
             )
             response.raise_for_status()
             return response.content
-        except requests.exceptions.Timeout:
-            raise VoiceCloneError("Request timed out", status_code=408)
+        except requests.exceptions.Timeout as exc:
+            raise VoiceCloneError("Request timed out", status_code=408) from exc
         except requests.exceptions.RequestException as e:
-            raise VoiceCloneError(f"Request failed: {e}")
+            raise VoiceCloneError(f"Request failed: {e}") from e
 
     def clone_from_audio(
         self,
@@ -128,10 +127,10 @@ class Qwen3Client:
             )
             response.raise_for_status()
             return response.content
-        except requests.exceptions.Timeout:
-            raise VoiceCloneError("Request timed out", status_code=408)
+        except requests.exceptions.Timeout as exc:
+            raise VoiceCloneError("Request timed out", status_code=408) from exc
         except requests.exceptions.RequestException as e:
-            raise VoiceCloneError(f"Request failed: {e}")
+            raise VoiceCloneError(f"Request failed: {e}") from e
 
     def health_check(self) -> bool:
         try:

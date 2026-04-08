@@ -18,16 +18,15 @@ class AudioExporter:
         """將音訊匯出為 MP3（需要安裝 pydub 與 ffmpeg）。"""
         try:
             from pydub import AudioSegment
-        except ImportError:
+        except ImportError as exc:
             raise RuntimeError(
                 "MP3 匯出需要 pydub 套件。請執行：pip install pydub\n"
                 "另外需安裝 ffmpeg 並加入 PATH。"
-            )
+            ) from exc
 
         audio_io = io.BytesIO(audio_data)
         data, samplerate = sf.read(audio_io, dtype="int16")
 
-        import numpy as np
 
         if data.ndim == 1:
             channels = 1

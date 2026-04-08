@@ -1,19 +1,18 @@
 """Settings tab for configuration management"""
 
-from PySide6 import QtWidgets
 from PySide6.QtWidgets import (
-    QWidget,
-    QVBoxLayout,
+    QCheckBox,
+    QComboBox,
+    QFormLayout,
+    QGroupBox,
     QHBoxLayout,
     QLabel,
     QLineEdit,
-    QSpinBox,
-    QPushButton,
-    QGroupBox,
-    QFormLayout,
     QMessageBox,
-    QCheckBox,
-    QComboBox,
+    QPushButton,
+    QSpinBox,
+    QVBoxLayout,
+    QWidget,
 )
 
 from ..core.config import Config

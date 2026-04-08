@@ -1,19 +1,29 @@
 """Main application window"""
 
-from PySide6 import QtWidgets, QtCore, QtGui
-from PySide6.QtWidgets import (
-    QTabWidget, QMessageBox, QLabel, QStatusBar, QHBoxLayout, QWidget,
-)
+from PySide6 import QtCore, QtGui, QtWidgets
 from PySide6.QtCore import Qt, QTimer
-from PySide6.QtGui import QShortcut, QKeySequence
+from PySide6.QtGui import QAction, QIcon, QKeySequence, QShortcut
+from PySide6.QtWidgets import (
+    QDialog,
+    QHBoxLayout,
+    QLabel,
+    QMenu,
+    QMessageBox,
+    QStatusBar,
+    QSystemTrayIcon,
+    QTabWidget,
+    QTextEdit,
+    QVBoxLayout,
+    QWidget,
+)
 
-from .text_tab import TextTab
+from .asr_tab import ASRTab
 from .clone_tab import CloneTab
 from .edit_tab import EditTab
 from .history_tab import HistoryTab
 from .settings_tab import SettingsTab
-from .asr_tab import ASRTab
-from .theme import COLOR_SUCCESS, COLOR_ERROR, COLOR_MUTED, COLOR_ACCENT, FONT_SIZE_SM
+from .text_tab import TextTab
+from .theme import COLOR_ACCENT, COLOR_ERROR, COLOR_MUTED, COLOR_SUCCESS, FONT_SIZE_SM
 
 # ── Tab labels with Unicode icons ─────────────────────────────────────────────
 _TAB_LABELS = [
@@ -76,6 +86,7 @@ class MainWindow(QtWidgets.QMainWindow):
 
         self._setup_ui()
         self._setup_status_bar()
+        self._setup_tray()
         self._connect_signals()
         self._setup_shortcuts()
         # Probe connection status after a short delay (non-blocking)
@@ -138,6 +149,55 @@ class MainWindow(QtWidgets.QMainWindow):
         self.ollama_dot = _StatusDot("LLM")
         self.status_bar.addPermanentWidget(self.ollama_dot)
 
+    def _setup_tray(self):
+        """Create system tray icon with context menu."""
+        if not QSystemTrayIcon.isSystemTrayAvailable():
+            return
+        self._tray = QSystemTrayIcon(self)
+        # Use the window icon (or generate a text icon)
+        icon = self.windowIcon()
+        if icon.isNull():
+            pix = QtGui.QPixmap(32, 32)
+            pix.fill(QtGui.QColor(COLOR_ACCENT))
+            icon = QIcon(pix)
+        self._tray.setIcon(icon)
+        self._tray.setToolTip("Qwen3-TTS 語音合成")
+
+        tray_menu = QMenu()
+        show_action = QAction("顯示主視窗", self)
+        show_action.triggered.connect(self._restore_from_tray)
+        tray_menu.addAction(show_action)
+        tray_menu.addSeparator()
+        quit_action = QAction("結束", self)
+        quit_action.triggered.connect(QtWidgets.QApplication.quit)
+        tray_menu.addAction(quit_action)
+
+        self._tray.setContextMenu(tray_menu)
+        self._tray.activated.connect(self._on_tray_activated)
+        self._tray.show()
+
+    def _on_tray_activated(self, reason):
+        if reason == QSystemTrayIcon.ActivationReason.Trigger:
+            self._restore_from_tray()
+
+    def _restore_from_tray(self):
+        self.showNormal()
+        self.activateWindow()
+
+    def closeEvent(self, event):  # noqa: N802
+        """Minimize to tray instead of quitting."""
+        if hasattr(self, "_tray") and self._tray.isVisible():
+            self.hide()
+            self._tray.showMessage(
+                "Qwen3-TTS",
+                "應用程式已最小化至系統列",
+                QSystemTrayIcon.MessageIcon.Information,
+                1500,
+            )
+            event.ignore()
+        else:
+            event.accept()
+
     def _connect_signals(self):
         self.edit_tab.text_sent.connect(self._on_text_sent_to_tts)
         self.edit_tab.text_sent_to_clone.connect(self._on_text_sent_to_clone)
@@ -159,6 +219,47 @@ class MainWindow(QtWidgets.QMainWindow):
         )
         # F5 → refresh connections
         QShortcut(QKeySequence("F5"), self).activated.connect(self._probe_connections)
+        # F1 → shortcut overlay
+        QShortcut(QKeySequence("F1"), self).activated.connect(self._show_shortcuts_dialog)
+        # Ctrl+Q → quit
+        QShortcut(QKeySequence("Ctrl+Q"), self).activated.connect(self._real_quit)
+
+    def _real_quit(self):
+        """Force-quit bypassing tray minimize."""
+        if hasattr(self, "_tray"):
+            self._tray.hide()
+        QtWidgets.QApplication.quit()
+
+    def _show_shortcuts_dialog(self):
+        dlg = QDialog(self)
+        dlg.setWindowTitle("快捷鍵一覽")
+        dlg.setMinimumSize(420, 360)
+        layout = QVBoxLayout(dlg)
+        text = QTextEdit()
+        text.setReadOnly(True)
+        text.setHtml(
+            "<h3>全域快捷鍵</h3>"
+            "<table cellpadding='4'>"
+            "<tr><td><b>Ctrl+1…6</b></td><td>切換分頁</td></tr>"
+            "<tr><td><b>Ctrl+H</b></td><td>歷史記錄</td></tr>"
+            "<tr><td><b>Ctrl+,</b></td><td>設定</td></tr>"
+            "<tr><td><b>F5</b></td><td>重新偵測連線</td></tr>"
+            "<tr><td><b>F1</b></td><td>顯示此快捷鍵一覽</td></tr>"
+            "<tr><td><b>Ctrl+Q</b></td><td>完全退出</td></tr>"
+            "</table>"
+            "<h3>文字合成</h3>"
+            "<table cellpadding='4'>"
+            "<tr><td><b>Ctrl+Enter</b></td><td>開始合成</td></tr>"
+            "<tr><td><b>Ctrl+S</b></td><td>匯出音訊</td></tr>"
+            "<tr><td><b>拖放 .txt/.md</b></td><td>載入文字檔</td></tr>"
+            "</table>"
+            "<h3>潤稿翻譯</h3>"
+            "<table cellpadding='4'>"
+            "<tr><td><b>Ctrl+Enter</b></td><td>傳送至合成</td></tr>"
+            "</table>"
+        )
+        layout.addWidget(text)
+        dlg.exec()
 
     def _probe_connections(self):
         """Check both API endpoints in background and update the status LEDs."""

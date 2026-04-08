@@ -26,7 +26,6 @@ import io
 import logging
 import sys
 from pathlib import Path
-from typing import Optional
 
 # ─── Local model resolution ───────────────────────────────────────────────────
 
@@ -129,7 +128,7 @@ class TTSRequest(BaseModel):
     pitch: float = Field(default=1.0, ge=0.1, le=5.0)
     volume: float = Field(default=1.0, ge=0.1, le=5.0)
     format: str = Field(default="wav")
-    speaker: Optional[str] = None  # optional voice name / speaker ID
+    speaker: str | None = None  # optional voice name / speaker ID
 
 
 class CloneTextRequest(BaseModel):

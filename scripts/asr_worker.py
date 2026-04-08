@@ -76,10 +76,10 @@ def download_audio(url: str, outdir: str) -> str:
     """
     try:
         import yt_dlp
-    except ImportError:
+    except ImportError as exc:
         raise RuntimeError(
             "yt-dlp 未安裝。請在 venv-asr 執行: pip install yt-dlp"
-        )
+        ) from exc
 
     out_template = os.path.join(outdir, "%(id)s.%(ext)s")
 
@@ -209,15 +209,15 @@ def run_asr(
     """
     try:
         import torch
-    except ImportError:
-        raise RuntimeError("torch 未安裝。請在 venv-asr 執行: pip install torch")
+    except ImportError as exc:
+        raise RuntimeError("torch 未安裝。請在 venv-asr 執行: pip install torch") from exc
 
     try:
         from qwen_asr import Qwen3ASRModel
-    except ImportError:
+    except ImportError as exc:
         raise RuntimeError(
             "qwen-asr 未安裝。請在 venv-asr 執行: pip install qwen-asr"
-        )
+        ) from exc
 
     # Dtype selection
     if device == "cpu":

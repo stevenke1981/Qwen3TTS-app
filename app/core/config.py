@@ -73,8 +73,10 @@ class Config:
 
     @classmethod
     def from_yaml(cls, path: str | Path) -> "Config":
-        with open(path, "r", encoding="utf-8") as f:
+        with open(path, encoding="utf-8") as f:
             data = yaml.safe_load(f)
+        if not data:
+            return cls()
         return cls._from_dict(data)
 
     @classmethod

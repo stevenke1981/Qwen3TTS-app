@@ -1,29 +1,32 @@
 """Text-to-speech tab"""
 
-import uuid
 from datetime import datetime
 
-from PySide6 import QtWidgets, QtCore
+from PySide6 import QtCore
+from PySide6.QtGui import QKeySequence, QShortcut
 from PySide6.QtWidgets import (
-    QWidget,
-    QVBoxLayout,
-    QHBoxLayout,
-    QTextEdit,
-    QPushButton,
-    QLabel,
-    QSlider,
-    QGroupBox,
+    QComboBox,
     QFileDialog,
+    QGroupBox,
+    QHBoxLayout,
+    QInputDialog,
+    QLabel,
     QMessageBox,
     QProgressBar,
+    QPushButton,
+    QSlider,
+    QTextEdit,
+    QVBoxLayout,
+    QWidget,
 )
 
-from PySide6.QtGui import QShortcut, QKeySequence
-
-from ..audio.player import AudioPlayer
 from ..audio.exporter import AudioExporter
+from ..audio.player import AudioPlayer
+from ..core.drafts import load_drafts, save_drafts
 from ..core.history import HistoryEntry
+from ..core.presets import VoicePreset, load_presets, save_custom_preset
 from .theme import make_secondary_button
+from .waveform_widget import WaveformWidget
 
 
 class _TTSWorker(QtCore.QObject):
@@ -46,6 +49,34 @@ class _TTSWorker(QtCore.QObject):
             self.error.emit(str(e))
 
 
+class _BatchTTSWorker(QtCore.QObject):
+    """Background worker for batch TTS synthesis (paragraph-by-paragraph)."""
+
+    progress = QtCore.Signal(int, int)  # current, total
+    item_done = QtCore.Signal(int, bytes)  # index, audio_data
+    finished = QtCore.Signal(list)  # list of (text, audio_bytes)
+    error = QtCore.Signal(str)
+
+    def __init__(self, api_client, paragraphs: list[str], config):
+        super().__init__()
+        self._api_client = api_client
+        self._paragraphs = paragraphs
+        self._config = config
+
+    def run(self):
+        try:
+            results = []
+            total = len(self._paragraphs)
+            for i, text in enumerate(self._paragraphs):
+                audio = self._api_client.synthesize(text, self._config)
+                results.append((text, audio))
+                self.progress.emit(i + 1, total)
+                self.item_done.emit(i, audio)
+            self.finished.emit(results)
+        except Exception as e:
+            self.error.emit(str(e))
+
+
 class TextTab(QWidget):
     def __init__(self, api_client, history_manager):
         super().__init__()
@@ -55,8 +86,18 @@ class TextTab(QWidget):
         self.current_audio: bytes | None = None
         self._thread: QtCore.QThread | None = None
         self._pending_text: str = ""
+        self._batch_results: list[tuple[str, bytes]] = []
 
+        self.setAcceptDrops(True)
         self._setup_ui()
+        self._load_presets()
+        self._restore_draft()
+
+        # Debounced auto-save: save draft 2s after last keystroke
+        self._draft_timer = QtCore.QTimer(self)
+        self._draft_timer.setSingleShot(True)
+        self._draft_timer.setInterval(2000)
+        self._draft_timer.timeout.connect(self._save_draft)
 
     def _setup_ui(self):
         layout = QVBoxLayout(self)
@@ -108,6 +149,25 @@ class TextTab(QWidget):
 
         layout.addWidget(params_group)
 
+        # ── Preset row ──
+        preset_row = QHBoxLayout()
+        preset_row.addWidget(QLabel("預設組合："))
+        self.preset_combo = QComboBox()
+        self.preset_combo.setMinimumWidth(140)
+        self.preset_combo.currentIndexChanged.connect(self._on_preset_selected)
+        preset_row.addWidget(self.preset_combo)
+        self.save_preset_btn = QPushButton("儲存為預設")
+        self.save_preset_btn.setToolTip("將目前參數儲存為自訂預設")
+        self.save_preset_btn.clicked.connect(self._on_save_preset)
+        make_secondary_button(self.save_preset_btn)
+        preset_row.addWidget(self.save_preset_btn)
+        preset_row.addStretch()
+        layout.addLayout(preset_row)
+
+        # ── Waveform ──
+        self.waveform = WaveformWidget()
+        layout.addWidget(self.waveform)
+
         self.progress_bar = QProgressBar()
         self.progress_bar.setVisible(False)
         layout.addWidget(self.progress_bar)
@@ -117,6 +177,12 @@ class TextTab(QWidget):
         self.synthesize_btn.clicked.connect(self._on_synthesize)
         self.synthesize_btn.setToolTip("開始語音合成 (Ctrl+Enter)")
         button_layout.addWidget(self.synthesize_btn)
+
+        self.batch_btn = QPushButton("📑  批次合成")
+        self.batch_btn.clicked.connect(self._on_batch_synthesize)
+        self.batch_btn.setToolTip("按段落批次合成並匯出 (每個段落一個音檔)")
+        make_secondary_button(self.batch_btn)
+        button_layout.addWidget(self.batch_btn)
 
         button_layout.addStretch()
 
@@ -198,6 +264,7 @@ class TextTab(QWidget):
         )
         self.history_manager.add(entry)
 
+        self.waveform.set_audio(audio_data)
         self.play_btn.setEnabled(True)
         self.stop_btn.setEnabled(True)
         self.export_btn.setEnabled(True)
@@ -210,8 +277,14 @@ class TextTab(QWidget):
         self.progress_bar.setVisible(False)
 
     def _on_text_changed(self):
-        count = len(self.text_input.toPlainText())
-        self.char_count_label.setText(f"{count} 字")
+        text = self.text_input.toPlainText()
+        chars = len(text)
+        lines = text.count("\n") + 1 if text else 0
+        words = len(text.split()) if text.strip() else 0
+        self.char_count_label.setText(f"{chars} 字 | {lines} 行 | ~{words} 詞")
+        # Restart auto-save timer
+        if hasattr(self, "_draft_timer"):
+            self._draft_timer.start()
 
     def _on_play(self):
         if self.current_audio:
@@ -239,3 +312,145 @@ class TextTab(QWidget):
                 QMessageBox.information(self, "成功", f"已匯出至：{path}")
             except Exception as e:
                 QMessageBox.critical(self, "錯誤", f"匯出失敗：{str(e)}")
+
+    # ── Preset methods ──
+
+    def _load_presets(self):
+        """Populate preset combo box from built-in + custom presets."""
+        self.preset_combo.blockSignals(True)
+        self.preset_combo.clear()
+        self.preset_combo.addItem("— 手動 —")
+        for preset in load_presets():
+            self.preset_combo.addItem(preset.name, userData=preset)
+        self.preset_combo.blockSignals(False)
+
+    def _on_preset_selected(self, index: int):
+        if index <= 0:
+            return
+        preset: VoicePreset | None = self.preset_combo.currentData()
+        if preset is None:
+            return
+        self.speed_slider.setValue(int(preset.speed * 100))
+        self.pitch_slider.setValue(int(preset.pitch * 100))
+        self.volume_slider.setValue(int(preset.volume * 100))
+
+    def _on_save_preset(self):
+        name, ok = QInputDialog.getText(self, "儲存預設", "請輸入預設名稱：")
+        if not ok or not name.strip():
+            return
+        preset = VoicePreset(
+            name=name.strip(),
+            speed=self.speed_slider.value() / 100,
+            pitch=self.pitch_slider.value() / 100,
+            volume=self.volume_slider.value() / 100,
+        )
+        save_custom_preset(preset)
+        self._load_presets()
+        QMessageBox.information(self, "成功", f"已儲存預設「{name.strip()}」")
+
+    # ── Batch TTS ──
+
+    def _on_batch_synthesize(self):
+        text = self.text_input.toPlainText().strip()
+        if not text:
+            QMessageBox.warning(self, "警告", "請輸入要合成的文字")
+            return
+        if self._thread and self._thread.isRunning():
+            return
+
+        paragraphs = [p.strip() for p in text.split("\n\n") if p.strip()]
+        if len(paragraphs) < 2:
+            QMessageBox.information(
+                self, "提示", "文字僅有一段，請直接使用「合成」。\n批次合成需以空行分隔段落。"
+            )
+            return
+
+        out_dir = QFileDialog.getExistingDirectory(self, "選擇批次匯出資料夾")
+        if not out_dir:
+            return
+
+        from ..api.qwen3_client import TTSConfig
+
+        config = TTSConfig(
+            speed=self.speed_slider.value() / 100,
+            pitch=self.pitch_slider.value() / 100,
+            volume=self.volume_slider.value() / 100,
+        )
+
+        self._batch_out_dir = out_dir
+        self._batch_results = []
+        self.synthesize_btn.setEnabled(False)
+        self.batch_btn.setEnabled(False)
+        self.progress_bar.setVisible(True)
+        self.progress_bar.setRange(0, len(paragraphs))
+        self.progress_bar.setValue(0)
+
+        self._thread = QtCore.QThread()
+        self._batch_worker = _BatchTTSWorker(self.api_client, paragraphs, config)
+        self._batch_worker.moveToThread(self._thread)
+        self._thread.started.connect(self._batch_worker.run)
+        self._batch_worker.progress.connect(
+            lambda cur, total: self.progress_bar.setValue(cur)
+        )
+        self._batch_worker.finished.connect(self._on_batch_done)
+        self._batch_worker.error.connect(self._on_batch_error)
+        self._batch_worker.finished.connect(self._thread.quit)
+        self._batch_worker.error.connect(self._thread.quit)
+        self._thread.finished.connect(self._batch_worker.deleteLater)
+        self._thread.start()
+
+    def _on_batch_done(self, results: list):
+        import os
+
+        for i, (text, audio) in enumerate(results):
+            fname = os.path.join(self._batch_out_dir, f"part_{i + 1:03d}.wav")
+            AudioExporter.to_wav(audio, fname)
+
+        self.synthesize_btn.setEnabled(True)
+        self.batch_btn.setEnabled(True)
+        self.progress_bar.setVisible(False)
+        QMessageBox.information(
+            self, "完成", f"已匯出 {len(results)} 段音訊至：\n{self._batch_out_dir}"
+        )
+
+    def _on_batch_error(self, error: str):
+        self.synthesize_btn.setEnabled(True)
+        self.batch_btn.setEnabled(True)
+        self.progress_bar.setVisible(False)
+        QMessageBox.critical(self, "錯誤", f"批次合成失敗：{error}")
+
+    # ── Drag-and-drop ──
+
+    def dragEnterEvent(self, event):  # noqa: N802
+        mime = event.mimeData()
+        if mime.hasUrls() or mime.hasText():
+            event.acceptProposedAction()
+
+    def dropEvent(self, event):  # noqa: N802
+        mime = event.mimeData()
+        if mime.hasUrls():
+            for url in mime.urls():
+                path = url.toLocalFile()
+                if path.lower().endswith((".txt", ".md", ".srt")):
+                    try:
+                        with open(path, encoding="utf-8") as f:
+                            self.text_input.setPlainText(f.read())
+                    except Exception:
+                        pass
+                    break
+        elif mime.hasText():
+            self.text_input.setPlainText(mime.text())
+
+    # ── Auto-save drafts ──
+
+    def _save_draft(self):
+        text = self.text_input.toPlainText()
+        drafts = load_drafts()
+        drafts["text_tab"] = text
+        save_drafts(drafts)
+
+    def _restore_draft(self):
+        drafts = load_drafts()
+        text = drafts.get("text_tab", "")
+        if text:
+            self.text_input.setPlainText(text)

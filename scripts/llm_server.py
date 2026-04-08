@@ -23,7 +23,6 @@ import logging
 import sys
 import time
 from pathlib import Path
-from typing import Optional
 
 logging.basicConfig(
     level=logging.INFO,
@@ -118,10 +117,10 @@ def _chat(messages: list[dict], max_new_tokens: int = 1024, temperature: float =
 # ─── FastAPI app ──────────────────────────────────────────────────────────────
 
 try:
+    import uvicorn
     from fastapi import FastAPI, HTTPException
     from fastapi.responses import JSONResponse
     from pydantic import BaseModel, Field
-    import uvicorn
 except ImportError as exc:
     log.error("fastapi / uvicorn not installed: %s", exc)
     sys.exit(1)

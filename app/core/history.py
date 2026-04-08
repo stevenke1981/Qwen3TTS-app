@@ -45,7 +45,7 @@ class HistoryManager:
 
     def _load(self) -> None:
         if self.storage_path.exists():
-            with open(self.storage_path, "r", encoding="utf-8") as f:
+            with open(self.storage_path, encoding="utf-8") as f:
                 data = yaml.safe_load(f) or {"entries": []}
             self._entries = [HistoryEntry.from_dict(e) for e in data.get("entries", [])]
 

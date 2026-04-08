@@ -1,26 +1,25 @@
 """Voice clone tab with text and audio reference support"""
 
-import uuid
 from datetime import datetime
 
-from PySide6 import QtWidgets, QtCore
+from PySide6 import QtCore
 from PySide6.QtWidgets import (
-    QWidget,
-    QVBoxLayout,
-    QHBoxLayout,
-    QTextEdit,
-    QPushButton,
-    QLabel,
-    QSlider,
-    QGroupBox,
+    QComboBox,
     QFileDialog,
+    QGroupBox,
+    QHBoxLayout,
+    QLabel,
     QMessageBox,
     QProgressBar,
-    QComboBox,
+    QPushButton,
+    QSlider,
+    QTextEdit,
+    QVBoxLayout,
+    QWidget,
 )
 
-from ..audio.player import AudioPlayer
 from ..audio.exporter import AudioExporter
+from ..audio.player import AudioPlayer
 from ..core.history import HistoryEntry
 
 
@@ -132,6 +131,19 @@ class CloneTab(QWidget):
         speed_layout.addWidget(self.speed_slider)
         speed_layout.addWidget(self.speed_label)
         params_layout.addLayout(speed_layout)
+
+        pitch_layout = QVBoxLayout()
+        pitch_layout.addWidget(QLabel("音調"))
+        self.pitch_slider = QSlider(QtCore.Qt.Horizontal)
+        self.pitch_slider.setRange(50, 200)
+        self.pitch_slider.setValue(100)
+        self.pitch_label = QLabel("1.0x")
+        self.pitch_slider.valueChanged.connect(
+            lambda v: self.pitch_label.setText(f"{v / 100:.1f}x")
+        )
+        pitch_layout.addWidget(self.pitch_slider)
+        pitch_layout.addWidget(self.pitch_label)
+        params_layout.addLayout(pitch_layout)
 
         volume_layout = QVBoxLayout()
         volume_layout.addWidget(QLabel("音量"))
@@ -287,7 +299,7 @@ class CloneTab(QWidget):
 
         return TTSConfig(
             speed=self.speed_slider.value() / 100,
-            pitch=1.0,
+            pitch=self.pitch_slider.value() / 100,
             volume=self.volume_slider.value() / 100,
         )
 

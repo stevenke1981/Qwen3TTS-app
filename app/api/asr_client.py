@@ -29,12 +29,11 @@ import json
 import subprocess
 import sys
 import tempfile
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Callable
 
 import requests
-
 
 # ─── Data classes ─────────────────────────────────────────────────────────────
 
@@ -393,9 +392,9 @@ class ASRClient:
                 input=request_json,
                 timeout=timeout,
             )
-        except subprocess.TimeoutExpired:
+        except subprocess.TimeoutExpired as exc:
             proc.kill()
-            raise RuntimeError(f"ASR 逾時（{timeout}秒）。請嘗試較短的音訊或使用 0.6B 模型。")
+            raise RuntimeError(f"ASR 逾時（{timeout}秒）。請嘗試較短的音訊或使用 0.6B 模型。") from exc
         except Exception as exc:
             raise RuntimeError(f"無法啟動 ASR 工作程序：{exc}") from exc
 

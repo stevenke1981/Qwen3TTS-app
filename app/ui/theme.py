@@ -13,7 +13,7 @@ Priority rules applied (ui-ux-pro-max skill):
   - Keyboard shortcuts for primary actions
 """
 
-from PySide6.QtGui import QFont, QPalette, QColor
+from PySide6.QtGui import QFont
 from PySide6.QtWidgets import QApplication
 
 # ─────────────────────────────────────────────

@@ -2,8 +2,6 @@
 
 from PySide6 import QtMultimedia
 
-from PySide6.QtCore import QUrl
-
 
 class AudioPlayer:
     def __init__(self):

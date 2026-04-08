@@ -2,17 +2,16 @@
 
 from PySide6 import QtWidgets
 from PySide6.QtWidgets import (
-    QWidget,
-    QVBoxLayout,
-    QHBoxLayout,
-    QListWidget,
-    QTextEdit,
-    QPushButton,
-    QLabel,
-    QGroupBox,
     QComboBox,
+    QGroupBox,
+    QHBoxLayout,
+    QLabel,
+    QListWidget,
     QMessageBox,
-    QSplitter,
+    QPushButton,
+    QTextEdit,
+    QVBoxLayout,
+    QWidget,
 )
 
 from ..core.history import HistoryEntry

@@ -29,10 +29,10 @@ class OllamaClient:
             response.raise_for_status()
             data = response.json()
             return data.get("response", "").strip()
-        except requests.exceptions.Timeout:
-            raise APIError("Ollama request timed out", status_code=408)
+        except requests.exceptions.Timeout as exc:
+            raise APIError("Ollama request timed out", status_code=408) from exc
         except requests.exceptions.RequestException as e:
-            raise APIError(f"Ollama request failed: {e}")
+            raise APIError(f"Ollama request failed: {e}") from e
 
     def polish(self, text: str, model: str | None = None) -> str:
         prompt = f"""請潤飾以下文字，使其更加通順、語法正確、語句優美。只需要輸出潤飾後的文字，不需要任何解釋。

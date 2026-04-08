@@ -342,6 +342,7 @@ Qwen3TTS-app/
 │   │   ├── asr_tab.py           # 語音辨識分頁
 │   │   ├── history_tab.py       # 歷史記錄分頁
 │   │   ├── settings_tab.py      # 設定分頁（TTS / LLM / ASR / UI）
+│   │   ├── waveform_widget.py   # 波形視覺化 Widget
 │   │   └── theme.py             # 深色主題 tokens
 │   ├── api/
 │   │   ├── __init__.py
@@ -358,12 +359,16 @@ Qwen3TTS-app/
 │       ├── __init__.py
 │       ├── config.py            # Dataclass 設定管理（YAML）
 │       ├── history.py           # 歷史記錄管理（YAML）
+│       ├── presets.py           # 語音預設管理
+│       ├── drafts.py            # 草稿自動存取
 │       └── chinese_converter.py # 簡繁轉換（opencc）
 ├── scripts/
 │   ├── asr_worker.py            # ASR subprocess worker（venv-asr 下執行）
 │   ├── tts_server.py            # Qwen3-TTS FastAPI 伺服器（venv-tts 下執行）
 │   ├── llm_server.py            # 本地 LLM FastAPI 伺服器（venv-llm 下執行）
-│   └── download_models.py       # 模型下載腳本（互動式選單）
+│   ├── download_models.py       # 模型下載腳本（互動式選單）
+│   ├── setup.py                 # 統一環境建立（Python，取代 bat/sh）
+│   └── start.py                 # 統一啟動腳本（Python）
 ├── models/                      # 本地模型目錄（git 忽略，由 download_models.bat 建立）
 │   ├── Qwen3-ASR-0.6B/          # 語音辨識模型（小）
 │   ├── Qwen3-ASR-1.7B/          # 語音辨識模型（大）
@@ -374,7 +379,15 @@ Qwen3TTS-app/
 │   ├── Qwen3-1.7B/              # LLM 潤稿翻譯（小型）
 │   └── Qwen3-4B/                # LLM 潤稿翻譯（中型）
 ├── data/
-│   └── history.yaml             # 歷史記錄持久化
+│   ├── history.yaml             # 歷史記錄持久化
+│   ├── presets.yaml             # 自訂語音預設
+│   └── drafts.yaml              # 草稿自動存取
+├── tests/                       # pytest 測試套件
+│   ├── test_config.py
+│   ├── test_presets.py
+│   ├── test_drafts.py
+│   ├── test_history.py
+│   └── test_chinese_converter.py
 ├── venv/                        # 主 GUI 虛擬環境（git 忽略）
 ├── venv-asr/                    # ASR 虛擬環境（git 忽略）
 ├── venv-tts/                    # TTS 虛擬環境（git 忽略）
@@ -385,6 +398,7 @@ Qwen3TTS-app/
 ├── requirements-llm.txt         # venv-llm 依賴
 ├── config.yaml                  # 執行期設定（git 忽略）
 ├── config.example.yaml          # 設定範本
+├── pyproject.toml               # ruff + pytest 配置
 ├── start.bat / start.sh         # GUI 啟動腳本
 ├── setup_asr.bat / setup_asr.sh # ASR 環境建立 + 安裝
 ├── setup-tts.bat / setup-tts.sh # TTS 環境建立 + 啟動伺服器
@@ -460,3 +474,48 @@ Qwen3TTS-app/
 | 本地模型路徑解析 | ✅ | `models/` 優先，fallback HF cache |
 | 深色主題 | ✅ | 全局 QSS dark theme |
 | 狀態列連線指示燈 | ✅ | Qwen3 / LLM 連線狀態 |
+
+### v0.2.0 新增功能
+
+| 功能 | 狀態 | 說明 |
+|------|------|------|
+| 批次 TTS 合成 | ✅ | 按段落拆分、逐段合成，匯出 `part_001.wav` 等 |
+| 波形視覺化 | ✅ | `WaveformWidget` — 合成完成即顯示波形 |
+| 語音預設 | ✅ | 5 個內建 + 自訂預設（`data/presets.yaml`） |
+| 拖放匯入 | ✅ | 拖放 `.txt` / `.md` / `.srt` 到 TextTab |
+| 系統匣 | ✅ | 最小化到系統匣，右鍵選單（顯示/退出） |
+| 文字統計 | ✅ | 即時字數 / 行數 / 中文字數統計 |
+| 克隆音調滑桿 | ✅ | CloneTab 新增 pitch 0.5–2.0 調整 |
+| 快捷鍵覆蓋 | ✅ | F1 顯示全快捷鍵表，Ctrl+Q 強制退出 |
+| 自動存草稿 | ✅ | 2 秒防抖自動存 / 啟動恢復（`data/drafts.yaml`） |
+| 統一 Python 腳本 | ✅ | `scripts/setup.py` / `scripts/start.py` 取代 bat/sh |
+
+### v0.2.0 品質改善
+
+| 項目 | 說明 |
+|------|------|
+| ruff linting | 全部通過（pyproject.toml 配置 py310, line-length 100） |
+| pytest 測試 | 52 tests（config, presets, drafts, history, chinese_converter） |
+| B904 修復 | 所有 `raise` 改為 `raise ... from exc` |
+| Signal 修正 | EditTab Signal 宣告移至 class 頂層 |
+| Config.from_yaml | 修復空 YAML 檔案 `NoneType` 錯誤 |
+
+---
+
+## 9. 新增檔案（v0.2.0）
+
+```
+app/ui/waveform_widget.py     # 波形視覺化 Widget
+app/core/presets.py            # 語音預設管理
+app/core/drafts.py             # 草稿自動存取
+scripts/setup.py               # 統一環境建立腳本
+scripts/start.py               # 統一啟動腳本
+pyproject.toml                 # ruff + pytest 配置
+tests/                         # 測試套件
+├── __init__.py
+├── test_config.py
+├── test_presets.py
+├── test_drafts.py
+├── test_history.py
+└── test_chinese_converter.py
+```

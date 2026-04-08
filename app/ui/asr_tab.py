@@ -17,19 +17,35 @@ import re
 from datetime import datetime
 from pathlib import Path
 
-from PySide6.QtCore import Qt, QThread, Signal, QObject
-from PySide6.QtGui import QClipboard, QShortcut, QKeySequence
+from PySide6.QtCore import QObject, Qt, QThread, Signal
+from PySide6.QtGui import QKeySequence, QShortcut
 from PySide6.QtWidgets import (
-    QWidget, QVBoxLayout, QHBoxLayout, QGroupBox, QLabel,
-    QLineEdit, QTextEdit, QPushButton, QComboBox, QCheckBox,
-    QProgressBar, QFileDialog, QMessageBox, QSizePolicy,
-    QRadioButton, QButtonGroup, QApplication, QFrame,
+    QApplication,
+    QButtonGroup,
+    QCheckBox,
+    QComboBox,
+    QFileDialog,
+    QGroupBox,
+    QHBoxLayout,
+    QLabel,
+    QLineEdit,
+    QMessageBox,
+    QProgressBar,
+    QPushButton,
+    QRadioButton,
+    QTextEdit,
+    QVBoxLayout,
+    QWidget,
 )
 
 from ..api.asr_client import ASRClient, ASRResult
 from .theme import (
-    make_secondary_button, COLOR_SUCCESS, COLOR_ERROR, COLOR_WARNING,
-    COLOR_MUTED, FONT_SIZE_SM, FONT_SIZE_BASE,
+    COLOR_ERROR,
+    COLOR_MUTED,
+    COLOR_SUCCESS,
+    COLOR_WARNING,
+    FONT_SIZE_SM,
+    make_secondary_button,
 )
 
 # ── Language options ───────────────────────────────────────────────────────────

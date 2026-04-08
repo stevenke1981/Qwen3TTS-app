@@ -116,7 +116,7 @@ def download_model(model: dict) -> None:
 
     print(f"\n--- Downloading {model['repo_id']} ---")
     print(f"    目標目錄: {local_dir}")
-    print(f"    (large file; progress is shown below)")
+    print("    (large file; progress is shown below)")
 
     snapshot_download(
         repo_id=model["repo_id"],

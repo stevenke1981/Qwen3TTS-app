@@ -1,26 +1,24 @@
 """Edit & Translate tab with multi-provider LLM integration"""
 
-from PySide6 import QtWidgets, QtCore
+from datetime import datetime
+
+from PySide6 import QtCore, QtWidgets
 from PySide6.QtWidgets import (
-    QWidget,
-    QVBoxLayout,
-    QHBoxLayout,
-    QTextEdit,
-    QPushButton,
-    QLabel,
     QComboBox,
     QGroupBox,
-    QProgressBar,
-    QMessageBox,
-    QCheckBox,
+    QHBoxLayout,
+    QLabel,
     QLineEdit,
-    QScrollArea,
+    QMessageBox,
+    QProgressBar,
+    QPushButton,
+    QTextEdit,
+    QVBoxLayout,
+    QWidget,
 )
 
-from ..api.llm_client import LLMClient
 from ..core.chinese_converter import ChineseConverter
 from ..core.history import HistoryEntry
-from datetime import datetime
 
 
 class _EditWorker(QtCore.QObject):
@@ -56,6 +54,9 @@ class _EditWorker(QtCore.QObject):
 
 
 class EditTab(QWidget):
+    text_sent = QtCore.Signal(str)
+    text_sent_to_clone = QtCore.Signal(str)
+
     def __init__(self, llm_client, qwen3_client, history_manager):
         super().__init__()
         self.llm_client = llm_client
@@ -306,5 +307,4 @@ class EditTab(QWidget):
             return
         self.text_sent_to_clone.emit(text)
 
-    text_sent = QtCore.Signal(str)
-    text_sent_to_clone = QtCore.Signal(str)
+
