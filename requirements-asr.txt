@@ -17,3 +17,8 @@ numpy>=1.26.0
 # PyTorch — CPU wheel (smaller); override with GPU wheel when needed:
 #   pip install torch --index-url https://download.pytorch.org/whl/cu121
 torch>=2.3.0
+
+# ASR FastAPI server (scripts/asr_server.py)
+fastapi>=0.111.0
+uvicorn>=0.30.0
+python-multipart>=0.0.9

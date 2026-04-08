@@ -65,10 +65,11 @@ class ASRConfig:
 class TTSServerConfig:
     """Local TTS server (scripts/tts_server.py) config."""
 
-    model_id: str = "Qwen/Qwen3-TTS-0.6B"
+    model_id: str = "Qwen/Qwen3-TTS-12Hz-0.6B-Base"
     device: str = "cpu"
     port: int = 8000
     auto_start: bool = True
+    hf_token: str = ""   # HuggingFace Access Token for gated models
 
 
 @dataclass
@@ -82,7 +83,19 @@ class LLMServerConfig:
 
 
 @dataclass
+class ASRServerConfig:
+    """Local ASR server (scripts/asr_server.py) config."""
+
+    model_id: str = "Qwen/Qwen3-ASR-0.6B"
+    device: str = "cpu"
+    port: int = 8002
+    auto_start: bool = True
+
+
+@dataclass
 class Config:
+    """Top-level application configuration."""
+
     api: APIConfig = field(default_factory=APIConfig)
     ollama: OllamaConfig = field(default_factory=OllamaConfig)
     llm: LLMConfig = field(default_factory=LLMConfig)
@@ -92,6 +105,7 @@ class Config:
     asr: ASRConfig = field(default_factory=ASRConfig)
     tts_server: TTSServerConfig = field(default_factory=TTSServerConfig)
     llm_server: LLMServerConfig = field(default_factory=LLMServerConfig)
+    asr_server: ASRServerConfig = field(default_factory=ASRServerConfig)
 
     @classmethod
     def from_yaml(cls, path: str | Path) -> "Config":
@@ -112,6 +126,7 @@ class Config:
         asr_data     = data.get("asr", {})
         tts_srv_data = data.get("tts_server", {})
         llm_srv_data = data.get("llm_server", {})
+        asr_srv_data = data.get("asr_server", {})
 
         return cls(
             api=APIConfig(
@@ -145,16 +160,23 @@ class Config:
                 api_key=asr_data.get("api_key", ""),
             ),
             tts_server=TTSServerConfig(
-                model_id=tts_srv_data.get("model_id", "Qwen/Qwen3-TTS-0.6B"),
+                model_id=tts_srv_data.get("model_id", "Qwen/Qwen3-TTS-12Hz-0.6B-Base"),
                 device=tts_srv_data.get("device", "cpu"),
                 port=tts_srv_data.get("port", 8000),
                 auto_start=tts_srv_data.get("auto_start", True),
+                hf_token=tts_srv_data.get("hf_token", ""),
             ),
             llm_server=LLMServerConfig(
                 model_id=llm_srv_data.get("model_id", "Qwen3-0.6B"),
                 device=llm_srv_data.get("device", "cpu"),
                 port=llm_srv_data.get("port", 8001),
                 auto_start=llm_srv_data.get("auto_start", True),
+            ),
+            asr_server=ASRServerConfig(
+                model_id=asr_srv_data.get("model_id", "Qwen/Qwen3-ASR-0.6B"),
+                device=asr_srv_data.get("device", "cpu"),
+                port=asr_srv_data.get("port", 8002),
+                auto_start=asr_srv_data.get("auto_start", True),
             ),
         )
 
@@ -200,12 +222,19 @@ class Config:
                 "device": self.tts_server.device,
                 "port": self.tts_server.port,
                 "auto_start": self.tts_server.auto_start,
+                "hf_token": self.tts_server.hf_token,
             },
             "llm_server": {
                 "model_id": self.llm_server.model_id,
                 "device": self.llm_server.device,
                 "port": self.llm_server.port,
                 "auto_start": self.llm_server.auto_start,
+            },
+            "asr_server": {
+                "model_id": self.asr_server.model_id,
+                "device": self.asr_server.device,
+                "port": self.asr_server.port,
+                "auto_start": self.asr_server.auto_start,
             },
         }
         with open(path, "w", encoding="utf-8") as f:

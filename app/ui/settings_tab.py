@@ -89,6 +89,23 @@ class SettingsTab(QWidget):
         self.tts_model_input = QLineEdit(self.config.tts_server.model_id)
         srv_layout.addRow("模型 ID：", self.tts_model_input)
 
+        self.hf_token_input = QLineEdit(self.config.tts_server.hf_token)
+        self.hf_token_input.setPlaceholderText("hf_xxxxxxxxxxxxxxxxxxxx（下載受限模型必填）")
+        self.hf_token_input.setEchoMode(QLineEdit.Password)
+        hf_row = QHBoxLayout()
+        hf_row.addWidget(self.hf_token_input)
+        from PySide6.QtWidgets import QToolButton
+        show_btn = QToolButton()
+        show_btn.setText("👁")
+        show_btn.setCheckable(True)
+        show_btn.toggled.connect(
+            lambda checked: self.hf_token_input.setEchoMode(
+                QLineEdit.Normal if checked else QLineEdit.Password
+            )
+        )
+        hf_row.addWidget(show_btn)
+        srv_layout.addRow("HuggingFace Token：", hf_row)
+
         self.tts_device_combo = QComboBox()
         self.tts_device_combo.addItems(["cpu", "cuda", "cuda:0", "cuda:1"])
         idx = self.tts_device_combo.findText(self.config.tts_server.device)
@@ -206,8 +223,34 @@ class SettingsTab(QWidget):
         page = QWidget()
         layout = QVBoxLayout(page)
 
-        group = QGroupBox("Qwen3 ASR 設定")
-        form = QFormLayout(group)
+        # ── Local ASR Server ──
+        srv_group = QGroupBox("本地 ASR 伺服器")
+        srv_layout = QFormLayout(srv_group)
+
+        self.asr_auto_start_cb = QCheckBox("啟動時自動開啟 ASR 伺服器")
+        self.asr_auto_start_cb.setChecked(self.config.asr_server.auto_start)
+        srv_layout.addRow("", self.asr_auto_start_cb)
+
+        self.asr_srv_model_input = QLineEdit(self.config.asr_server.model_id)
+        srv_layout.addRow("模型 ID：", self.asr_srv_model_input)
+
+        self.asr_device_combo = QComboBox()
+        self.asr_device_combo.addItems(["cpu", "cuda", "cuda:0", "cuda:1"])
+        idx = self.asr_device_combo.findText(self.config.asr_server.device)
+        if idx >= 0:
+            self.asr_device_combo.setCurrentIndex(idx)
+        srv_layout.addRow("裝置：", self.asr_device_combo)
+
+        self.asr_port_spin = QSpinBox()
+        self.asr_port_spin.setRange(1024, 65535)
+        self.asr_port_spin.setValue(self.config.asr_server.port)
+        srv_layout.addRow("連接埠：", self.asr_port_spin)
+
+        layout.addWidget(srv_group)
+
+        # ── API settings (remote mode) ──
+        api_group = QGroupBox("ASR API 設定（遠端模式）")
+        form = QFormLayout(api_group)
 
         self.asr_mode_combo = QComboBox()
         self.asr_mode_combo.addItems(["local（本地 venv-asr）", "api（遠端 API）"])
@@ -224,7 +267,7 @@ class SettingsTab(QWidget):
         self.asr_api_key_input.setEchoMode(QLineEdit.Password)
         form.addRow("API Key：", self.asr_api_key_input)
 
-        layout.addWidget(group)
+        layout.addWidget(api_group)
 
         test_row = QHBoxLayout()
         self.test_asr_btn = QPushButton("🔌  測試 ASR 連線")
@@ -290,7 +333,7 @@ class SettingsTab(QWidget):
         info_group = QGroupBox("系統資訊")
         form = QFormLayout(info_group)
 
-        form.addRow("應用版本：", QLabel("0.4.0"))
+        form.addRow("應用版本：", QLabel("0.5.0"))
         form.addRow("Python：", QLabel(f"{sys.version.split()[0]}"))
         form.addRow("平台：", QLabel(f"{platform.system()} {platform.release()}"))
         form.addRow("GPU：", QLabel(get_gpu_info()))
@@ -314,6 +357,8 @@ class SettingsTab(QWidget):
         health_layout.addRow("TTS 伺服器：", self._tts_status)
         self._llm_status = QLabel("⏳ 檢測中…")
         health_layout.addRow("LLM 伺服器：", self._llm_status)
+        self._asr_status = QLabel("⏳ 檢測中…")
+        health_layout.addRow("ASR 伺服器：", self._asr_status)
 
         layout.addWidget(health_group)
 
@@ -407,11 +452,12 @@ class SettingsTab(QWidget):
             QMessageBox.warning(self, "連線失敗", f"無法連接到 LLM 服務（{provider} @ {url}）")
 
     def _refresh_health(self):
-        """Check TTS and LLM server health (quick sync probe)."""
+        """Check TTS, LLM and ASR server health (quick sync probe)."""
         import requests as _req
         for label, port in [
             (self._tts_status, self.config.tts_server.port),
             (self._llm_status, self.config.llm_server.port),
+            (self._asr_status, self.config.asr_server.port),
         ]:
             try:
                 resp = _req.get(f"http://localhost:{port}/health", timeout=2)
@@ -448,6 +494,7 @@ class SettingsTab(QWidget):
         self.config.tts_server.model_id = self.tts_model_input.text().strip()
         self.config.tts_server.device = self.tts_device_combo.currentText()
         self.config.tts_server.port = self.tts_port_spin.value()
+        self.config.tts_server.hf_token = self.hf_token_input.text().strip()
         # TTS API
         self.config.api.qwen3_base_url = self.url_input.text().strip()
         self.config.api.qwen3_timeout = self.timeout_spin.value()
@@ -471,6 +518,11 @@ class SettingsTab(QWidget):
             self._asr_client.mode    = asr_mode
             self._asr_client.api_url = self.config.asr.api_url
             self._asr_client.api_key = self.config.asr.api_key
+        # ASR server
+        self.config.asr_server.auto_start = self.asr_auto_start_cb.isChecked()
+        self.config.asr_server.model_id   = self.asr_srv_model_input.text().strip()
+        self.config.asr_server.device     = self.asr_device_combo.currentText()
+        self.config.asr_server.port       = self.asr_port_spin.value()
         # UI
         self.config.ui.window_size = (self.width_spin.value(), self.height_spin.value())
         self.config.ui.theme = self.theme_combo.currentText()
@@ -515,6 +567,7 @@ class SettingsTab(QWidget):
             self.config.ui = new_cfg.ui
             self.config.tts_server = new_cfg.tts_server
             self.config.llm_server = new_cfg.llm_server
+            self.config.asr_server = new_cfg.asr_server
             # Refresh widgets
             self.url_input.setText(self.config.api.qwen3_base_url)
             self.timeout_spin.setValue(self.config.api.qwen3_timeout)

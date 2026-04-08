@@ -106,7 +106,7 @@ class _ManagedServer:
 
 
 class ServerManager:
-    """Manages TTS and LLM local server lifecycles."""
+    """Manages TTS, LLM and ASR local server lifecycles."""
 
     def __init__(
         self,
@@ -116,6 +116,9 @@ class ServerManager:
         llm_port: int = 8001,
         llm_model: str = "Qwen3-0.6B",
         llm_device: str = "cpu",
+        asr_port: int = 8002,
+        asr_model: str = "Qwen/Qwen3-ASR-0.6B",
+        asr_device: str = "cpu",
     ):
         self.tts = _ManagedServer(
             name="TTS Server",
@@ -131,7 +134,14 @@ class ServerManager:
             args=["--port", str(llm_port), "--model-id", llm_model, "--device", llm_device],
             health_url=f"http://localhost:{llm_port}/health",
         )
-        self._servers = [self.tts, self.llm]
+        self.asr = _ManagedServer(
+            name="ASR Server",
+            venv="venv-asr",
+            script="asr_server.py",
+            args=["--port", str(asr_port), "--model-id", asr_model, "--device", asr_device],
+            health_url=f"http://localhost:{asr_port}/health",
+        )
+        self._servers = [self.tts, self.llm, self.asr]
         atexit.register(self.stop_all)
 
     def start_all(self) -> dict[str, bool]:

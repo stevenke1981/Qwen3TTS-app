@@ -1,5 +1,7 @@
 """Main application window"""
 
+import logging
+
 from PySide6 import QtCore, QtGui, QtWidgets
 from PySide6.QtCore import Qt, QTimer
 from PySide6.QtGui import QAction, QIcon, QKeySequence, QShortcut
@@ -9,6 +11,8 @@ from PySide6.QtWidgets import (
     QLabel,
     QMenu,
     QMessageBox,
+    QPushButton,
+    QSplitter,
     QStatusBar,
     QSystemTrayIcon,
     QTabWidget,
@@ -21,6 +25,7 @@ from ..core.app_logger import read_log_tail
 from .asr_tab import ASRTab
 from .clone_tab import CloneTab
 from .edit_tab import EditTab
+from .error_console import ErrorConsoleWidget
 from .history_tab import HistoryTab
 from .settings_tab import SettingsTab
 from .text_tab import TextTab
@@ -91,6 +96,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self._setup_tray()
         self._connect_signals()
         self._setup_shortcuts()
+        self._setup_error_console()
         self._restore_geometry()
         # Probe connection status after a short delay (non-blocking)
         QTimer.singleShot(1500, self._probe_connections)
@@ -115,8 +121,23 @@ class MainWindow(QtWidgets.QMainWindow):
         layout.setContentsMargins(8, 8, 8, 4)
         layout.setSpacing(0)
 
+        # Main splitter: tabs (top) + error console (bottom, collapsible)
+        self._main_splitter = QSplitter(Qt.Orientation.Vertical)
+        layout.addWidget(self._main_splitter)
+
+        tabs_container = QWidget()
+        tabs_layout = QVBoxLayout(tabs_container)
+        tabs_layout.setContentsMargins(0, 0, 0, 0)
+        tabs_layout.setSpacing(0)
+
         tabs = QTabWidget()
-        layout.addWidget(tabs)
+        tabs_layout.addWidget(tabs)
+        self._main_splitter.addWidget(tabs_container)
+
+        # Error console panel (added in _setup_error_console)
+        self._error_console_placeholder = QWidget()
+        self._error_console_placeholder.setMaximumHeight(0)
+        self._main_splitter.addWidget(self._error_console_placeholder)
 
         self.text_tab = TextTab(self.qwen3_client, self.history_manager)
         self.clone_tab = CloneTab(self.qwen3_client, self.history_manager)
@@ -145,6 +166,17 @@ class MainWindow(QtWidgets.QMainWindow):
         # Left: status text
         self.status_label = QLabel("就緒")
         self.status_bar.addWidget(self.status_label, 1)
+
+        # Error console toggle button (far right)
+        self._err_badge = QPushButton("⚠ 0 錯誤")
+        self._err_badge.setFlat(True)
+        self._err_badge.setFixedHeight(20)
+        self._err_badge.setToolTip("顯示/隱藏錯誤訊息面板")
+        self._err_badge.setStyleSheet(
+            f"color: {COLOR_MUTED}; font-size: {FONT_SIZE_SM}px; background: transparent;"
+        )
+        self._err_badge.clicked.connect(self._toggle_error_console)
+        self.status_bar.addPermanentWidget(self._err_badge)
 
         # Right: service connection dots
         sep = QLabel(" │ ")
@@ -244,6 +276,8 @@ class MainWindow(QtWidgets.QMainWindow):
         """Force-quit bypassing tray minimize."""
         if hasattr(self, "_tray"):
             self._tray.hide()
+        if hasattr(self, "_log_handler"):
+            logging.getLogger().removeHandler(self._log_handler)
         if self.server_manager is not None:
             self.server_manager.stop_all()
         QtWidgets.QApplication.quit()
@@ -311,6 +345,48 @@ class MainWindow(QtWidgets.QMainWindow):
             # Keep reference so GC doesn't collect them
             setattr(self, f"_probe_thread_{name}", thread)
             setattr(self, f"_probe_obj_{name}", probe)
+
+    def _setup_error_console(self) -> None:
+        """Wire up the ErrorConsoleWidget and its logging handler."""
+        self.error_console = ErrorConsoleWidget()
+        # Replace the placeholder with the actual widget
+        self._main_splitter.replaceWidget(1, self.error_console)
+        self.error_console.hide()
+
+        # Connect counter → status bar badge
+        self.error_console.error_count_changed.connect(self._on_error_count_changed)
+
+        # Install logging handler
+        handler = self.error_console.make_handler(logging.WARNING)
+        logging.getLogger().addHandler(handler)
+        self._log_handler = handler   # keep ref to remove on close
+
+    def _toggle_error_console(self) -> None:
+        """Show or hide the error console panel."""
+        if self.error_console.isVisible():
+            self.error_console.hide()
+            # Restore splitter so top panel fills all space
+            sz = self._main_splitter.sizes()
+            total = sum(sz)
+            self._main_splitter.setSizes([total, 0])
+        else:
+            self.error_console.show()
+            sz = self._main_splitter.sizes()
+            total = sum(sz)
+            self._main_splitter.setSizes([max(200, total - 180), 180])
+
+    def _on_error_count_changed(self, count: int) -> None:
+        """Update the status bar error badge color and count."""
+        if count == 0:
+            label = "⚠ 0 錯誤"
+            color = COLOR_MUTED
+        else:
+            label = f"⚠ {count} 錯誤"
+            color = COLOR_ERROR
+        self._err_badge.setText(label)
+        self._err_badge.setStyleSheet(
+            f"color: {color}; font-size: {FONT_SIZE_SM}px; background: transparent;"
+        )
 
     def _on_probe_done(self, name: str, ok: bool):
         if name == "qwen3":

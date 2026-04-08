@@ -18,7 +18,7 @@ from datetime import datetime
 from pathlib import Path
 
 from PySide6.QtCore import QObject, Qt, QThread, Signal
-from PySide6.QtGui import QKeySequence, QShortcut
+from PySide6.QtGui import QKeySequence, QShortcut, QTextCursor
 from PySide6.QtWidgets import (
     QApplication,
     QButtonGroup,
@@ -87,6 +87,55 @@ _AUDIO_FILTER = (
 
 
 # ─── Background worker ────────────────────────────────────────────────────────
+
+class _BatchASRWorker(QObject):
+    """Sequential multi-file ASR worker.
+
+    Signals
+    -------
+    progress(int, int, str)  current index (1-based), total, filename
+    item_done(str, str)      filename, transcript text
+    finished()
+    error(str, str)          filename, error message
+    """
+
+    progress  = Signal(int, int, str)   # current, total, filename
+    item_done = Signal(str, str)        # filename, text
+    finished  = Signal()
+    error     = Signal(str, str)        # filename, error message
+
+    def __init__(
+        self,
+        client: ASRClient,
+        paths: list[str],
+        model_id: str,
+        language: str,
+    ) -> None:
+        super().__init__()
+        self._client   = client
+        self._paths    = paths
+        self._model_id = model_id
+        self._language = language
+
+    def run(self) -> None:
+        total = len(self._paths)
+        for idx, path in enumerate(self._paths, 1):
+            filename = Path(path).name
+            self.progress.emit(idx, total, filename)
+            try:
+                result = self._client.transcribe(
+                    source            = path,
+                    source_type       = "file",
+                    model_id          = self._model_id,
+                    language          = self._language,
+                    timestamps        = False,
+                    progress_callback = lambda _: None,
+                )
+                self.item_done.emit(filename, result.text)
+            except Exception as exc:
+                self.error.emit(filename, str(exc))
+        self.finished.emit()
+
 
 class _ASRWorker(QObject):
     """Runs ASRClient.transcribe() in a QThread.
@@ -338,8 +387,14 @@ class ASRTab(QWidget):
         self.cancel_btn.setVisible(False)
         self.cancel_btn.setFixedWidth(90)
 
+        self.batch_btn = QPushButton("📂  批量處理")
+        self.batch_btn.setMinimumHeight(40)
+        self.batch_btn.setToolTip("選取多個音訊檔案並逐一辨識，結果附加到輸出區")
+        make_secondary_button(self.batch_btn)
+
         btn_row.addWidget(self.start_btn)
         btn_row.addWidget(self.cancel_btn)
+        btn_row.addWidget(self.batch_btn)
         btn_row.addStretch()
         vbox.addLayout(btn_row)
 
@@ -449,6 +504,7 @@ class ASRTab(QWidget):
         self.export_vtt_btn.clicked.connect(lambda: self._on_export("vtt"))
         self.rb_engine_local.toggled.connect(self._on_engine_toggled)
         self.rb_engine_api.toggled.connect(self._on_engine_toggled)
+        self.batch_btn.clicked.connect(self._on_batch)
 
     # ── Slots ─────────────────────────────────────────────────────────────────
 
@@ -539,6 +595,78 @@ class ASRTab(QWidget):
         self._worker.error.connect(self._thread.quit)
         self._thread.finished.connect(self._thread.deleteLater)
         self._thread.start()
+
+    def _on_batch(self) -> None:
+        """Batch-transcribe multiple files sequentially."""
+        if self.rb_engine_local.isChecked() and not self.asr_client.is_available():
+            QMessageBox.critical(
+                self, "venv-asr 未就緒",
+                "ASR 環境（venv-asr）尚未安裝。\n"
+                "請先執行 setup_asr.bat（Windows）或 bash setup_asr.sh（Linux/Mac）。",
+            )
+            return
+
+        paths, _ = QFileDialog.getOpenFileNames(
+            self, "批量選擇音訊 / 影片檔案", "", _AUDIO_FILTER
+        )
+        if not paths:
+            return
+
+        model_id = self.model_combo.currentData()
+        language = self.lang_combo.currentData()
+
+        self._set_busy(True)
+        self._clear_output()
+        self._batch_lines: list[str] = []
+        self.stage_label.setText(f"批量：0 / {len(paths)}")
+
+        self._batch_thread = QThread(self)
+        self._batch_worker = _BatchASRWorker(
+            client   = self.asr_client,
+            paths    = paths,
+            model_id = model_id,
+            language = language,
+        )
+        self._batch_worker.moveToThread(self._batch_thread)
+        self._batch_worker.progress.connect(self._on_batch_progress)
+        self._batch_worker.item_done.connect(self._on_batch_item)
+        self._batch_worker.error.connect(self._on_batch_item_error)
+        self._batch_worker.finished.connect(self._on_batch_finished)
+        self._batch_thread.started.connect(self._batch_worker.run)
+        self._batch_worker.finished.connect(self._batch_thread.quit)
+        self._batch_thread.finished.connect(self._batch_thread.deleteLater)
+        self._batch_thread.start()
+
+    def _on_batch_progress(self, current: int, total: int, filename: str) -> None:
+        self.stage_label.setText(f"批量：{current} / {total}  —  {filename}")
+        self.progress_bar.setRange(0, total)
+        self.progress_bar.setValue(current - 1)
+        self.progress_bar.setVisible(True)
+
+    def _on_batch_item(self, filename: str, text: str) -> None:
+        self._batch_lines.append(f"── {filename} ──")
+        self._batch_lines.append(text)
+        self._batch_lines.append("")
+        self.output_edit.setPlainText("\n".join(self._batch_lines))
+        # Scroll to bottom
+        cursor = self.output_edit.textCursor()
+        cursor.movePosition(QTextCursor.MoveOperation.End)
+        self.output_edit.setTextCursor(cursor)
+
+    def _on_batch_item_error(self, filename: str, msg: str) -> None:
+        self._batch_lines.append(f"── {filename}  [錯誤: {msg[:120]}] ──")
+        self._batch_lines.append("")
+        self.output_edit.setPlainText("\n".join(self._batch_lines))
+
+    def _on_batch_finished(self) -> None:
+        self._set_busy(False)
+        total = len([ln for ln in self._batch_lines if ln.startswith("── ") and not ln.endswith("錯誤")])
+        self.stage_label.setText(f"✓ 批量完成，共 {total} 個檔案")
+        self.stage_label.setStyleSheet(
+            f"color: {COLOR_SUCCESS}; font-size: {FONT_SIZE_SM}px; background: transparent;"
+        )
+        self.copy_btn.setEnabled(True)
+        self.export_txt_btn.setEnabled(True)
 
     def _on_cancel(self) -> None:
         if self._thread and self._thread.isRunning():
