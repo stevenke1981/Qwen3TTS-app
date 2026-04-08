@@ -109,3 +109,48 @@
 | Phase 2 品質 | ✅ ruff 全部通過，116 tests passed |
 | Phase 3 文件/知識圖譜 | ✅ SPEC.md 更新，Mermaid 架構圖 |
 | Phase 4 Ship | ✅ v0.4.0 版本號，git 提交 |
+
+
+---
+
+## v0.4.1 計畫（Bug 修復 + 功能補完）
+
+### Phase 0 — Bug 修復
+
+| Bug | 修復方式 | 狀態 |
+|-----|---------|------|
+| QObject 跨執行緒崩潰 | QEventLoop + QThread 模式 | ✅ |
+| huggingface_hub 未安裝 | requirements.txt + pip install | ✅ |
+| 最終進度訊號缺失 | 補發 progress.emit(100,100) | ✅ |
+| QMessageBox.Yes 棄用 | StandardButton.Yes | ✅ |
+
+### Phase 1 — 十項實用功能
+
+| 功能 | 狀態 |
+|------|------|
+| HuggingFace 鏡像（HF_ENDPOINT） | ✅ |
+| 視窗幾何持久化 | ✅ |
+| 歷史 CSV 匯出 | ✅ |
+| 文字尋找與取代（Ctrl+H） | ✅ |
+| 開啟模型資料夾按鈕 | ✅ |
+| 插入範例文字按鈕 | ✅ |
+| 波形縮放平移 | ✅ |
+| ASR 自動標點（auto_punctuation.py） | ✅ |
+| 複製音訊路徑按鈕 | ✅ |
+| 批次合成進度百分比 | ✅ |
+
+### Phase 2 — 品質
+
+| 項目 | 結果 |
+|------|------|
+| ruff | ✅ 全部通過 |
+| pytest | ✅ 133 passed, 1 skipped |
+
+### Phase 3 — Ship
+
+| 項目 | 狀態 |
+|------|------|
+| git commit | ✅ |
+| git push | ✅ |
+| SPEC.md 更新 | ✅ |
+| plan.md 更新 | ✅ |

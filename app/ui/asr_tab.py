@@ -39,6 +39,7 @@ from PySide6.QtWidgets import (
 )
 
 from ..api.asr_client import ASRClient, ASRResult
+from ..core.auto_punctuation import add_punctuation
 from .theme import (
     COLOR_ERROR,
     COLOR_MUTED,
@@ -268,6 +269,19 @@ class ASRTab(QWidget):
         )
         ts_col.addWidget(self.ts_check)
         row.addLayout(ts_col)
+
+        # Auto-punctuation checkbox
+        punc_col = QVBoxLayout()
+        punc_col.setSpacing(4)
+        punc_col.addWidget(QLabel("後處理"))
+        self.auto_punc_check = QCheckBox("自動補全標點符號")
+        self.auto_punc_check.setChecked(True)
+        self.auto_punc_check.setToolTip(
+            "對辨識結果套用啟發式標點補全\n"
+            "（若原文已含標點則自動跳過）"
+        )
+        punc_col.addWidget(self.auto_punc_check)
+        row.addLayout(punc_col)
 
         row.addStretch()
         vbox.addLayout(row)
@@ -550,15 +564,18 @@ class ASRTab(QWidget):
         self.seg_count_lbl.setText(str(len(result.segments)) if result.segments else "0（無時間戳）")
 
         # Display in output area
+        use_punc = self.auto_punc_check.isChecked()
         if result.segments:
             lines = []
             for seg in result.segments:
                 start = _fmt_display_time(seg.start)
                 end   = _fmt_display_time(seg.end)
-                lines.append(f"[{start} → {end}]  {seg.text}")
+                seg_text = add_punctuation(seg.text) if use_punc else seg.text
+                lines.append(f"[{start} → {end}]  {seg_text}")
             self.output_edit.setPlainText("\n".join(lines))
         else:
-            self.output_edit.setPlainText(result.text)
+            final_text = add_punctuation(result.text) if use_punc else result.text
+            self.output_edit.setPlainText(final_text)
 
         for btn in (self.copy_btn, self.export_txt_btn,
                     self.export_srt_btn, self.export_vtt_btn):

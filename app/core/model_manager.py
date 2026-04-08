@@ -105,11 +105,19 @@ class ModelDownloadWorker(QtCore.QObject):
         except ImportError:
             self.error.emit(
                 "huggingface_hub 未安裝。\n"
-                "請執行: pip install huggingface_hub"
+                "請執行: pip install huggingface_hub\n"
+                "（已加入 requirements.txt，請重新安裝依賴）"
             )
             return
 
         _MODELS_DIR.mkdir(parents=True, exist_ok=True)
+
+        # Allow China users to redirect HF downloads via HF_ENDPOINT env var
+        # e.g. HF_ENDPOINT=https://hf-mirror.com
+        import os
+        hf_endpoint = os.environ.get("HF_ENDPOINT", "").strip()
+        if hf_endpoint:
+            log.info("Using custom HF_ENDPOINT: %s", hf_endpoint)
 
         for model in self._models:
             if is_model_downloaded(model):
@@ -123,20 +131,24 @@ class ModelDownloadWorker(QtCore.QObject):
             self.progress.emit(model.name, 0, 100)
 
             try:
-                snapshot_download(
-                    repo_id=model.repo_id,
-                    local_dir=str(local_dir),
-                    ignore_patterns=[
+                kwargs: dict = {
+                    "repo_id": model.repo_id,
+                    "local_dir": str(local_dir),
+                    "ignore_patterns": [
                         "*.msgpack",
                         "flax_model*",
                         "tf_model*",
                         "rust_model*",
                     ],
-                )
+                }
+                if hf_endpoint:
+                    kwargs["endpoint"] = hf_endpoint
+                snapshot_download(**kwargs)
             except Exception as exc:
                 self.error.emit(f"下載 {model.name} 失敗：{exc}")
                 return
 
+            self.progress.emit(model.name, 100, 100)
             log.info("Download complete: %s", model.name)
             self.model_done.emit(model.name)
 

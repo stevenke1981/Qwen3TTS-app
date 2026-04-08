@@ -1,8 +1,12 @@
 """History management tab"""
 
+import csv
+import io as _io
+
 from PySide6 import QtWidgets
 from PySide6.QtWidgets import (
     QComboBox,
+    QFileDialog,
     QGroupBox,
     QHBoxLayout,
     QLabel,
@@ -63,6 +67,15 @@ class HistoryTab(QWidget):
         list_button_layout.addWidget(self.delete_btn)
 
         left_layout.addLayout(list_button_layout)
+
+        # ── Export row ──
+        export_row = QHBoxLayout()
+        self.export_csv_btn = QPushButton("📊 匯出 CSV")
+        self.export_csv_btn.setToolTip("將目前篩選的歷史記錄匯出為 CSV 檔案")
+        self.export_csv_btn.clicked.connect(self._on_export_csv)
+        export_row.addWidget(self.export_csv_btn)
+        export_row.addStretch()
+        left_layout.addLayout(export_row)
 
         main_layout.addWidget(left_panel, stretch=1)
 
@@ -195,9 +208,9 @@ class HistoryTab(QWidget):
             self,
             "確認刪除",
             "確定要刪除這筆歷史記錄嗎？",
-            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
         )
-        if reply == QMessageBox.Yes:
+        if reply == QMessageBox.StandardButton.Yes:
             self.history_manager.delete(self.selected_entry.id)
             self._load_history()
             self.detail_text.clear()
@@ -210,15 +223,49 @@ class HistoryTab(QWidget):
             self,
             "確認清空",
             "確定要清空全部歷史記錄嗎？此操作無法復原。",
-            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
         )
-        if reply == QMessageBox.Yes:
+        if reply == QMessageBox.StandardButton.Yes:
             self.history_manager.clear()
             self._load_history()
             self.detail_text.clear()
             self.retry_btn.setEnabled(False)
             self.copy_text_btn.setEnabled(False)
             self.delete_btn.setEnabled(False)
+
+    def _on_export_csv(self) -> None:
+        """Export currently filtered history to a CSV file."""
+        filter_mode = self.filter_combo.currentIndex()
+        entries = [
+            e for e in self.history_manager.get_all()
+            if self._matches_filter(e, filter_mode)
+        ]
+        if not entries:
+            QMessageBox.information(self, "無記錄", "目前沒有可匯出的歷史記錄。")
+            return
+
+        path, _ = QFileDialog.getSaveFileName(
+            self, "儲存 CSV", "history.csv", "CSV 檔案 (*.csv)"
+        )
+        if not path:
+            return
+
+        try:
+            buf = _io.StringIO()
+            writer = csv.DictWriter(
+                buf,
+                fieldnames=["id", "timestamp", "operation", "text",
+                            "ref_text", "ref_audio_name", "audio_duration"],
+                extrasaction="ignore",
+            )
+            writer.writeheader()
+            for e in entries:
+                writer.writerow(e.to_dict())
+            with open(path, "w", encoding="utf-8-sig", newline="") as f:
+                f.write(buf.getvalue())
+            QMessageBox.information(self, "匯出成功", f"已匯出 {len(entries)} 筆記錄到：\n{path}")
+        except OSError as exc:
+            QMessageBox.critical(self, "匯出失敗", str(exc))
 
     def refresh(self):
         self._load_history()

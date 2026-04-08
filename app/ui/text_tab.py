@@ -3,14 +3,19 @@
 from datetime import datetime
 
 from PySide6 import QtCore
-from PySide6.QtGui import QKeySequence, QShortcut
+from PySide6.QtGui import QKeySequence, QShortcut, QTextCursor
 from PySide6.QtWidgets import (
+    QApplication,
     QComboBox,
+    QDialog,
+    QDialogButtonBox,
     QFileDialog,
+    QFormLayout,
     QGroupBox,
     QHBoxLayout,
     QInputDialog,
     QLabel,
+    QLineEdit,
     QMessageBox,
     QProgressBar,
     QPushButton,
@@ -30,6 +35,74 @@ from ..core.recent_texts import add_recent, load_recent
 from ..core.ssml import SSML_TAGS, strip_ssml
 from .theme import make_secondary_button
 from .waveform_widget import WaveformWidget
+
+
+class _FindReplaceDialog(QDialog):
+    """Simple find-and-replace dialog for the text input."""
+
+    def __init__(self, text_edit: QTextEdit, parent=None):
+        super().__init__(parent)
+        self._editor = text_edit
+        self.setWindowTitle("查找 & 取代")
+        self.setMinimumWidth(380)
+
+        form = QFormLayout()
+        self._find_input = QLineEdit()
+        self._find_input.setPlaceholderText("查找文字…")
+        form.addRow("查找：", self._find_input)
+
+        self._replace_input = QLineEdit()
+        self._replace_input.setPlaceholderText("取代為…")
+        form.addRow("取代為：", self._replace_input)
+
+        btn_box = QDialogButtonBox()
+        self._find_btn = btn_box.addButton("查找下一個", QDialogButtonBox.ActionRole)
+        self._replace_btn = btn_box.addButton("取代", QDialogButtonBox.ActionRole)
+        self._replace_all_btn = btn_box.addButton("全部取代", QDialogButtonBox.ActionRole)
+        close_btn = btn_box.addButton(QDialogButtonBox.Close)
+
+        self._find_btn.clicked.connect(self._on_find)
+        self._replace_btn.clicked.connect(self._on_replace)
+        self._replace_all_btn.clicked.connect(self._on_replace_all)
+        close_btn.clicked.connect(self.reject)
+
+        layout = QVBoxLayout(self)
+        layout.addLayout(form)
+        layout.addWidget(btn_box)
+
+        self._find_input.returnPressed.connect(self._on_find)
+
+    def _on_find(self) -> None:
+        term = self._find_input.text()
+        if not term:
+            return
+        if not self._editor.find(term):
+            # Wrap around
+            cursor = self._editor.textCursor()
+            cursor.movePosition(QTextCursor.Start)
+            self._editor.setTextCursor(cursor)
+            self._editor.find(term)
+
+    def _on_replace(self) -> None:
+        term = self._find_input.text()
+        replacement = self._replace_input.text()
+        cursor = self._editor.textCursor()
+        if cursor.hasSelection() and cursor.selectedText() == term:
+            cursor.insertText(replacement)
+        self._on_find()
+
+    def _on_replace_all(self) -> None:
+        term = self._find_input.text()
+        replacement = self._replace_input.text()
+        if not term:
+            return
+        text = self._editor.toPlainText()
+        count = text.count(term)
+        if count == 0:
+            QMessageBox.information(self, "查找", f"找不到「{term}」")
+            return
+        self._editor.setPlainText(text.replace(term, replacement))
+        QMessageBox.information(self, "取代完成", f"已取代 {count} 處「{term}」→「{replacement}」")
 
 
 class _TTSWorker(QtCore.QObject):
@@ -130,6 +203,23 @@ class TextTab(QWidget):
             btn.clicked.connect(lambda _=False, tpl=tag.template: self._insert_ssml(tpl))
             make_secondary_button(btn)
             toolbar_row.addWidget(btn)
+
+        # ── Find & Replace button ──
+        find_replace_btn = QPushButton("🔍 取代")
+        find_replace_btn.setToolTip("查找並取代文字 (Ctrl+H)")
+        find_replace_btn.setMaximumWidth(70)
+        find_replace_btn.clicked.connect(self._on_find_replace)
+        make_secondary_button(find_replace_btn)
+        toolbar_row.addWidget(find_replace_btn)
+
+        # ── Insert sample text button ──
+        sample_btn = QPushButton("📝 範例")
+        sample_btn.setToolTip("插入範例文字（方便快速測試）")
+        sample_btn.setMaximumWidth(60)
+        sample_btn.clicked.connect(self._on_insert_sample)
+        make_secondary_button(sample_btn)
+        toolbar_row.addWidget(sample_btn)
+
         toolbar_row.addStretch()
         input_layout.addLayout(toolbar_row)
 
@@ -233,6 +323,13 @@ class TextTab(QWidget):
         make_secondary_button(self.export_btn)
         button_layout.addWidget(self.export_btn)
 
+        self.copy_path_btn = QPushButton("📋  複製路徑")
+        self.copy_path_btn.clicked.connect(self._on_copy_audio_path)
+        self.copy_path_btn.setEnabled(False)
+        self.copy_path_btn.setToolTip("將最後匯出的音訊路徑複製到剪貼簿")
+        make_secondary_button(self.copy_path_btn)
+        button_layout.addWidget(self.copy_path_btn)
+
         layout.addLayout(button_layout)
 
         # ── A/B compare row ──
@@ -255,6 +352,7 @@ class TextTab(QWidget):
         # Keyboard shortcuts
         QShortcut(QKeySequence("Ctrl+Return"), self).activated.connect(self._on_synthesize)
         QShortcut(QKeySequence("Ctrl+S"), self).activated.connect(self._on_export)
+        QShortcut(QKeySequence("Ctrl+H"), self).activated.connect(self._on_find_replace)
 
     def _on_synthesize(self):
         text = self.text_input.toPlainText().strip()
@@ -372,9 +470,32 @@ class TextTab(QWidget):
                     AudioExporter.to_mp3(self.current_audio, path)
                 else:
                     AudioExporter.to_wav(self.current_audio, path)
+                self._last_export_path = path
+                self.copy_path_btn.setEnabled(True)
                 QMessageBox.information(self, "成功", f"已匯出至：{path}")
             except Exception as e:
                 QMessageBox.critical(self, "錯誤", f"匯出失敗：{str(e)}")
+
+    def _on_copy_audio_path(self) -> None:
+        """Copy the last exported audio file path to clipboard."""
+        path = getattr(self, "_last_export_path", None)
+        if path:
+            QApplication.clipboard().setText(path)
+
+    def _on_find_replace(self) -> None:
+        """Open a Find & Replace dialog for the text input."""
+        dialog = _FindReplaceDialog(self.text_input, self)
+        dialog.exec()
+
+    def _on_insert_sample(self) -> None:
+        """Insert a short Chinese sample text for quick testing."""
+        sample = (
+            "春眠不覺曉，處處聞啼鳥。\n"
+            "夜來風雨聲，花落知多少。\n\n"
+            "人工智慧語音合成技術，讓文字化為聲音。\n"
+            "Qwen3-TTS 支援中文、英文等多語言合成。"
+        )
+        self.text_input.setPlainText(sample)
 
     # ── Preset methods ──
 
@@ -529,9 +650,11 @@ class TextTab(QWidget):
     # ── Batch progress percentage ──
 
     def _on_batch_progress(self, current: int, total: int):
+        self.progress_bar.setRange(0, total)
         self.progress_bar.setValue(current)
         pct = int(current / total * 100) if total else 0
         self.progress_bar.setFormat(f"{current}/{total}  ({pct}%)")
+        self.progress_bar.setTextVisible(True)
 
     # ── A/B compare helpers ──
 

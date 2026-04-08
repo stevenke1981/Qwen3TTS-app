@@ -647,3 +647,45 @@ tests/test_text_templates.py   # 文字範本測試
 tests/test_model_manager.py    # 模型管理測試
 tests/test_server_manager.py   # 伺服器管理測試
 ```
+
+
+## 11. v0.4.1 更新（Bug 修復 + 10 項實用功能）
+
+### 修復項目
+
+| 問題 | 修復位置 |
+|------|---------|
+| 啟動時 QObject 跨執行緒建立子物件崩潰 | app/main.py — 改用 QEventLoop + QThread 模式 |
+| huggingface_hub 未安裝導致模型下載失敗 | requirements.txt 新增 huggingface_hub>=0.23.0 |
+| ModelDownloadWorker 下載完成後未發送最終進度訊號 | app/core/model_manager.py |
+| QMessageBox.Yes 已棄用引發 AttributeError | history_tab.py + main.py — 改用 StandardButton.Yes |
+| WaveformWidget._drag_x 未初始化 | app/ui/waveform_widget.py — __init__ 加入初始化 |
+| closeEvent 重複定義 | app/ui/main_window.py — 合併為單一方法 |
+| text_tab.py _on_copy_audio_path 使用未導入的 QtWidgets | 改用已導入的 QApplication |
+
+### 新增功能
+
+| 功能 | 位置 | 說明 |
+|------|------|------|
+| HuggingFace 鏡像支援 | app/core/model_manager.py | 讀取 HF_ENDPOINT 環境變數 |
+| 視窗幾何持久化 | app/ui/main_window.py | 關閉時儲存位置/大小，重開時還原 |
+| 歷史紀錄 CSV 匯出 | app/ui/history_tab.py | 「匯出 CSV」按鈕，utf-8-sig 編碼 |
+| 文字尋找與取代 | app/ui/text_tab.py | _FindReplaceDialog 類別，Ctrl+H 快捷鍵 |
+| 開啟模型資料夾按鈕 | app/ui/settings_tab.py | 跨平台開啟 models/ 目錄 |
+| 插入範例文字按鈕 | app/ui/text_tab.py | 插入中文範例文字 |
+| 波形視圖縮放平移 | app/ui/waveform_widget.py | 滾輪縮放，水平拖曳平移 |
+| ASR 自動標點模組 | app/core/auto_punctuation.py | 純 Python 啟發式標點補全，整合至 ASR Tab |
+| 複製音訊路徑按鈕 | app/ui/text_tab.py | 合成後複製匯出路徑至剪貼簿 |
+| 批次合成百分比顯示 | app/ui/text_tab.py | 進度列顯示 n/total (pct%) |
+
+### 新增檔案（v0.4.1）
+
+- app/core/auto_punctuation.py — ASR 後處理自動標點模組
+- tests/test_auto_punctuation.py — 18 項測試
+
+### 品質
+
+| 項目 | 結果 |
+|------|------|
+| ruff | 全部通過 |
+| pytest | 133 passed, 1 skipped（15 個測試檔） |

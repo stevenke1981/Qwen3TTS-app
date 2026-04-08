@@ -125,38 +125,70 @@ def setup_app() -> None:
     create_venv("app")
 
 
+def _interactive_menu() -> tuple[str, bool]:
+    """Show interactive menu when no arguments are provided (e.g. double-click on Windows)."""
+    print("Qwen3-TTS 環境設定工具")
+    print("=" * 40)
+    print("請選擇要設定的環境：")
+    print("  1. app  - 主應用程式")
+    print("  2. tts  - TTS 語音合成")
+    print("  3. asr  - ASR 語音辨識")
+    print("  4. llm  - LLM 語言模型")
+    print("  5. all  - 全部環境")
+    print()
+    choice = input("請輸入選項 (1-5)：").strip()
+    target_map = {"1": "app", "2": "tts", "3": "asr", "4": "llm", "5": "all"}
+    target = target_map.get(choice, "")
+    if not target:
+        print(f"[ERROR] 無效選項：{choice!r}")
+        input("按 Enter 鍵離開...")
+        sys.exit(1)
+
+    launch_input = input("設定完成後自動啟動伺服器？(Y/n)：").strip().lower()
+    no_launch = launch_input in ("n", "no")
+    return target, no_launch
+
+
 def main() -> None:
-    parser = argparse.ArgumentParser(
-        description="Qwen3-TTS 環境設定工具",
-    )
-    parser.add_argument(
-        "target",
-        choices=["tts", "asr", "llm", "app", "all"],
-        help="要設定的環境 (tts/asr/llm/app/all)",
-    )
-    parser.add_argument(
-        "--no-launch",
-        action="store_true",
-        help="設定完成後不自動啟動伺服器",
-    )
-    args = parser.parse_args()
+    # If run without arguments (e.g. double-clicked on Windows), show interactive menu
+    if len(sys.argv) == 1:
+        target, no_launch = _interactive_menu()
+    else:
+        parser = argparse.ArgumentParser(
+            description="Qwen3-TTS 環境設定工具",
+        )
+        parser.add_argument(
+            "target",
+            choices=["tts", "asr", "llm", "app", "all"],
+            help="要設定的環境 (tts/asr/llm/app/all)",
+        )
+        parser.add_argument(
+            "--no-launch",
+            action="store_true",
+            help="設定完成後不自動啟動伺服器",
+        )
+        args = parser.parse_args()
+        target = args.target
+        no_launch = args.no_launch
 
-    targets = ["app", "tts", "asr", "llm"] if args.target == "all" else [args.target]
+    targets = ["app", "tts", "asr", "llm"] if target == "all" else [target]
 
-    for target in targets:
+    for t in targets:
         print(f"\n{'='*60}")
-        print(f"  Setting up: {target}")
+        print(f"  Setting up: {t}")
         print(f"{'='*60}\n")
-        if target == "tts":
-            setup_tts(launch=not args.no_launch)
-        elif target == "asr":
+        if t == "tts":
+            setup_tts(launch=not no_launch)
+        elif t == "asr":
             setup_asr()
-        elif target == "llm":
-            setup_llm(launch=not args.no_launch)
-        elif target == "app":
+        elif t == "llm":
+            setup_llm(launch=not no_launch)
+        elif t == "app":
             setup_app()
 
     print("\n[DONE] All environments set up successfully.")
+    if len(sys.argv) == 1:
+        input("\n按 Enter 鍵離開...")
 
 
 if __name__ == "__main__":

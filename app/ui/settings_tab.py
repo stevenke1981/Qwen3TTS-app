@@ -323,6 +323,14 @@ class SettingsTab(QWidget):
         self.refresh_status_btn.clicked.connect(self._refresh_health)
         make_secondary_button(self.refresh_status_btn)
         refresh_row.addWidget(self.refresh_status_btn)
+
+        # ── Open models folder ──
+        open_models_btn = QPushButton("📂  開啟模型資料夾")
+        open_models_btn.setToolTip("在系統檔案管理器中開啟 models/ 資料夾")
+        open_models_btn.clicked.connect(self._on_open_models_folder)
+        make_secondary_button(open_models_btn)
+        refresh_row.addWidget(open_models_btn)
+
         refresh_row.addStretch()
         layout.addLayout(refresh_row)
 
@@ -416,6 +424,23 @@ class SettingsTab(QWidget):
             except Exception:
                 label.setText("❌ 未運行")
                 label.setStyleSheet(f"color: {COLOR_ERROR};")
+
+    def _on_open_models_folder(self) -> None:
+        """Open the local models/ directory in the system file manager."""
+        import os
+        import subprocess
+        from pathlib import Path
+
+        models_dir = Path(__file__).resolve().parent.parent.parent / "models"
+        models_dir.mkdir(parents=True, exist_ok=True)
+
+        import sys
+        if sys.platform == "win32":
+            os.startfile(str(models_dir))  # noqa: S606
+        elif sys.platform == "darwin":
+            subprocess.Popen(["open", str(models_dir)])  # noqa: S603,S607
+        else:
+            subprocess.Popen(["xdg-open", str(models_dir)])  # noqa: S603,S607
 
     def _on_save(self):
         # TTS server

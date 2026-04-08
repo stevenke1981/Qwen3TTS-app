@@ -10,7 +10,7 @@ _PROJECT_ROOT = Path(__file__).parent.parent
 if str(_PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(_PROJECT_ROOT))
 
-from PySide6.QtCore import QSharedMemory
+from PySide6.QtCore import QEventLoop, QSharedMemory, QThread
 from PySide6.QtWidgets import QApplication, QMessageBox, QProgressDialog
 
 from app.api.asr_client import ASRClient
@@ -28,7 +28,13 @@ log = logging.getLogger(__name__)
 
 
 def _check_and_download_models(app: QApplication) -> None:
-    """If default 0.6B models are missing, offer to download them."""
+    """If default 0.6B models are missing, offer to download them.
+
+    Uses a QEventLoop (instead of processEvents polling) so the dialog
+    remains responsive without triggering "QObject from different thread"
+    warnings.  The ``thread`` and ``worker`` references are kept alive on
+    the stack until the loop exits so they cannot be garbage-collected early.
+    """
     missing = get_missing_models()
     if not missing:
         return
@@ -38,54 +44,72 @@ def _check_and_download_models(app: QApplication) -> None:
         None,
         "模型缺失",
         f"以下本地模型尚未安裝：\n{names}\n\n是否立即下載？（約 2~5 GB）",
-        QMessageBox.Yes | QMessageBox.No,
-        QMessageBox.Yes,
+        QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+        QMessageBox.StandardButton.Yes,
     )
-    if reply != QMessageBox.Yes:
+    if reply != QMessageBox.StandardButton.Yes:
         return
 
-    progress = QProgressDialog("正在下載模型…", "取消", 0, 100)
+    # ── Progress dialog (lives on the main thread) ─────────────────────────
+    progress = QProgressDialog("正在下載模型…", "取消", 0, len(missing) * 100)
     progress.setWindowTitle("模型安裝")
     progress.setMinimumDuration(0)
     progress.setValue(0)
-    progress.setAutoClose(True)
+    progress.setAutoClose(False)
+    progress.setAutoReset(False)
+    progress.show()
+    app.processEvents()  # paint before blocking
 
+    # ── Worker (no parent → safe to moveToThread) ──────────────────────────
     worker = ModelDownloadWorker(missing)
 
-    def _on_progress(name: str, pct: int):
-        progress.setLabelText(f"正在下載：{name} ({pct}%)")
-        total_pct = int(pct / len(missing))  # rough approximation
-        progress.setValue(min(total_pct, 99))
+    # Local event-loop so we don't need processEvents() polling
+    loop = QEventLoop()
 
-    def _on_model_done(name: str):
+    _completed: list[int] = [0]  # mutable counter captured by closures
+
+    def _on_progress(name: str, _cur: int, _tot: int) -> None:
+        # Each model contributes 100 units to the total progress
+        done_units = _completed[0] * 100
+        progress.setValue(done_units + min(_cur, 99))
+        progress.setLabelText(f"正在下載：{name}")
+
+    def _on_model_done(name: str) -> None:
+        _completed[0] += 1
+        progress.setValue(_completed[0] * 100)
         log.info("模型下載完成：%s", name)
 
-    def _on_all_done():
-        progress.setValue(100)
+    def _on_all_done() -> None:
+        progress.setValue(len(missing) * 100)
+        progress.close()
         QMessageBox.information(None, "完成", "所有模型下載完成！")
+        loop.quit()
 
-    def _on_error(msg: str):
+    def _on_error(msg: str) -> None:
         progress.close()
         QMessageBox.warning(None, "下載錯誤", f"模型下載失敗：\n{msg}")
+        loop.quit()
+
+    def _on_canceled() -> None:
+        log.info("使用者取消下載")
+        loop.quit()
 
     worker.progress.connect(_on_progress)
     worker.model_done.connect(_on_model_done)
     worker.all_done.connect(_on_all_done)
     worker.error.connect(_on_error)
-
-    from PySide6.QtCore import QThread
+    progress.canceled.connect(_on_canceled)
 
     thread = QThread()
     worker.moveToThread(thread)
     thread.started.connect(worker.run)
+    # When loop exits, give the thread a chance to finish cleanly
     worker.all_done.connect(thread.quit)
     worker.error.connect(thread.quit)
-    progress.canceled.connect(thread.quit)
-    thread.start()
 
-    # Block until download finishes (keeps event loop alive for progress updates)
-    while thread.isRunning():
-        app.processEvents()
+    thread.start()
+    loop.exec()  # blocks main thread but processes Qt events properly
+    thread.wait(5000)  # up to 5 s for cleanup
 
 
 def main():

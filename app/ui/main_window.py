@@ -91,8 +91,18 @@ class MainWindow(QtWidgets.QMainWindow):
         self._setup_tray()
         self._connect_signals()
         self._setup_shortcuts()
+        self._restore_geometry()
         # Probe connection status after a short delay (non-blocking)
         QTimer.singleShot(1500, self._probe_connections)
+
+    def _restore_geometry(self) -> None:
+        """Restore window size and position from QSettings."""
+        settings = QtCore.QSettings("Qwen3TTS", "MainWindow")
+        geometry = settings.value("geometry")
+        if geometry:
+            self.restoreGeometry(geometry)
+        else:
+            self.resize(*self.config.ui.window_size)
 
     def _setup_ui(self):
         self.setWindowTitle("Qwen3-TTS 語音合成")
@@ -187,7 +197,9 @@ class MainWindow(QtWidgets.QMainWindow):
         self.activateWindow()
 
     def closeEvent(self, event):  # noqa: N802
-        """Minimize to tray instead of quitting."""
+        """Save geometry; minimize to tray if active, otherwise quit."""
+        settings = QtCore.QSettings("Qwen3TTS", "MainWindow")
+        settings.setValue("geometry", self.saveGeometry())
         if hasattr(self, "_tray") and self._tray.isVisible():
             self.hide()
             self._tray.showMessage(
