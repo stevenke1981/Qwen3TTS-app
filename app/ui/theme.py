@@ -558,16 +558,53 @@ QFrame[frameShape="5"] {{ /* VLine */
 """
 
 
-def apply_theme(app: QApplication) -> None:
-    """Apply the dark theme to a QApplication instance."""
-    # Global stylesheet
+def apply_theme(app: QApplication, mode: str = "dark") -> None:
+    """Apply theme to a QApplication instance.
+
+    Args:
+        app: The QApplication to style.
+        mode: ``"dark"`` (default) or ``"light"``.
+    """
+    if mode == "light":
+        _apply_light_overrides()
+    else:
+        _reset_dark_tokens()
     app.setStyleSheet(_qss())
 
-    # Application-level font
     font = QFont()
     font.setFamilies(APP_FONT_FAMILY.split(", "))
     font.setPixelSize(APP_FONT_SIZE)
     app.setFont(font)
+
+
+def _reset_dark_tokens() -> None:
+    """Ensure semantic tokens point to the dark palette (default)."""
+    _S.update({
+        "bg-base":      _P["gray-800"],
+        "bg-surface":   _P["gray-700"],
+        "bg-elevated":  _P["gray-650"],
+        "bg-hover":     _P["gray-600"],
+        "bg-active":    _P["gray-500"],
+        "border":       _P["gray-600"],
+        "text-primary": _P["gray-100"],
+        "text-muted":   _P["gray-300"],
+        "text-disabled":_P["gray-400"],
+    })
+
+
+def _apply_light_overrides() -> None:
+    """Swap semantic tokens to a light palette."""
+    _S.update({
+        "bg-base":      "#f5f5fa",
+        "bg-surface":   "#ffffff",
+        "bg-elevated":  "#e8e8f0",
+        "bg-hover":     "#dddde8",
+        "bg-active":    "#d0d0e0",
+        "border":       "#c0c0d0",
+        "text-primary": "#1a1a2e",
+        "text-muted":   "#555570",
+        "text-disabled":"#8888a0",
+    })
 
 
 def make_secondary_button(btn) -> None:

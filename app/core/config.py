@@ -62,6 +62,26 @@ class ASRConfig:
 
 
 @dataclass
+class TTSServerConfig:
+    """Local TTS server (scripts/tts_server.py) config."""
+
+    model_id: str = "Qwen/Qwen3-TTS-0.6B"
+    device: str = "cpu"
+    port: int = 8000
+    auto_start: bool = True
+
+
+@dataclass
+class LLMServerConfig:
+    """Local LLM server (scripts/llm_server.py) config."""
+
+    model_id: str = "Qwen3-0.6B"
+    device: str = "cpu"
+    port: int = 8001
+    auto_start: bool = True
+
+
+@dataclass
 class Config:
     api: APIConfig = field(default_factory=APIConfig)
     ollama: OllamaConfig = field(default_factory=OllamaConfig)
@@ -70,6 +90,8 @@ class Config:
     ui: UIConfig = field(default_factory=UIConfig)
     history: HistoryConfig = field(default_factory=HistoryConfig)
     asr: ASRConfig = field(default_factory=ASRConfig)
+    tts_server: TTSServerConfig = field(default_factory=TTSServerConfig)
+    llm_server: LLMServerConfig = field(default_factory=LLMServerConfig)
 
     @classmethod
     def from_yaml(cls, path: str | Path) -> "Config":
@@ -88,6 +110,8 @@ class Config:
         ui_data      = data.get("ui", {})
         history_data = data.get("history", {})
         asr_data     = data.get("asr", {})
+        tts_srv_data = data.get("tts_server", {})
+        llm_srv_data = data.get("llm_server", {})
 
         return cls(
             api=APIConfig(
@@ -100,14 +124,14 @@ class Config:
                 default_model=ollama_data.get("default_model", "llama3.2:latest"),
             ),
             llm=LLMConfig(
-                provider=llm_data.get("provider", "ollama"),
-                base_url=llm_data.get("base_url", "http://localhost:11434"),
+                provider=llm_data.get("provider", "fastapi"),
+                base_url=llm_data.get("base_url", "http://localhost:8001"),
                 api_key=llm_data.get("api_key", ""),
-                model=llm_data.get("model", "llama3.2:latest"),
+                model=llm_data.get("model", "Qwen3-0.6B"),
             ),
             audio=AudioConfig(**audio_data),
             ui=UIConfig(
-                theme=ui_data.get("theme", "light"),
+                theme=ui_data.get("theme", "dark"),
                 window_size=tuple(ui_data.get("window_size", [960, 640])),
             ),
             history=HistoryConfig(**history_data),
@@ -119,6 +143,18 @@ class Config:
                 mode=asr_data.get("mode", "local"),
                 api_url=asr_data.get("api_url", ""),
                 api_key=asr_data.get("api_key", ""),
+            ),
+            tts_server=TTSServerConfig(
+                model_id=tts_srv_data.get("model_id", "Qwen/Qwen3-TTS-0.6B"),
+                device=tts_srv_data.get("device", "cpu"),
+                port=tts_srv_data.get("port", 8000),
+                auto_start=tts_srv_data.get("auto_start", True),
+            ),
+            llm_server=LLMServerConfig(
+                model_id=llm_srv_data.get("model_id", "Qwen3-0.6B"),
+                device=llm_srv_data.get("device", "cpu"),
+                port=llm_srv_data.get("port", 8001),
+                auto_start=llm_srv_data.get("auto_start", True),
             ),
         )
 
@@ -158,6 +194,18 @@ class Config:
                 "mode": self.asr.mode,
                 "api_url": self.asr.api_url,
                 "api_key": self.asr.api_key,
+            },
+            "tts_server": {
+                "model_id": self.tts_server.model_id,
+                "device": self.tts_server.device,
+                "port": self.tts_server.port,
+                "auto_start": self.tts_server.auto_start,
+            },
+            "llm_server": {
+                "model_id": self.llm_server.model_id,
+                "device": self.llm_server.device,
+                "port": self.llm_server.port,
+                "auto_start": self.llm_server.auto_start,
             },
         }
         with open(path, "w", encoding="utf-8") as f:

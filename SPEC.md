@@ -64,7 +64,12 @@
 ### 2.2 模組依賴關係
 
 ```
-main.py  (QSharedMemory 單一實例鎖)
+main.py  (QSharedMemory 單一實例鎖 + ServerManager 生命週期)
+    ├── _check_and_download_models()
+    │       └── ModelDownloadWorker (QThread)
+    ├── ServerManager
+    │       ├── _ManagedServer("TTS", venv-tts, tts_server.py)
+    │       └── _ManagedServer("LLM", venv-llm, llm_server.py)
     └── MainWindow
             ├── TextTab
             │       ├── Qwen3Client
@@ -88,7 +93,7 @@ main.py  (QSharedMemory 單一實例鎖)
             │               └── [api]   遠端 OpenAI-compatible 端點
             ├── HistoryTab
             │       └── HistoryManager
-            └── SettingsTab
+            └── SettingsTab  (QTabWidget: TTS / LLM / ASR / 音訊UI / 系統)
                     ├── Config
                     ├── ASRClient  (同步 mode/api_url/api_key)
                     ├── Qwen3Client (測試連線)
@@ -168,25 +173,63 @@ main.py  (QSharedMemory 單一實例鎖)
 | 刪除 | 單筆或清空全部 |
 | 複製文字 | 複製到剪貼簿 |
 
-### 3.6 設定（Settings）
+### 3.6 設定（Settings）— 分頁式佈局（v0.4.0）
+
+**TTS 設定分頁：**
 
 | 群組 | 欄位 | 說明 |
 |------|------|------|
-| Qwen3-TTS API | API URL | TTS 伺服器位址（預設 `localhost:8000`） |
+| 本地伺服器 | 模型 ID | TTS 模型（預設 Qwen/Qwen3-TTS-0.6B） |
+| | 裝置 | cpu / cuda / mps |
+| | 連接埠 | 伺服器埠號（預設 8000） |
+| | 自動啟動 | 啟動 app 時自動啟動 TTS 伺服器 |
+| API 設定 | API URL | TTS 伺服器位址（預設 `localhost:8000`） |
 | | 超時時間 | 10–300 秒 |
 | | SSL 驗證 | 是否驗證 SSL 憑證 |
-| LLM 潤稿翻譯 | 模式 | `ollama` / `openai` / `fastapi` |
-| | Base URL | LLM 伺服器位址 |
-| | API Key | Bearer Token（Ollama 可留空） |
-| | 模型 | 模型 ID |
-| Qwen3 ASR | 模式 | `local（本地 venv-asr）` / `api（遠端 API）` |
-| | API URL | 遠端 ASR 端點（API 模式） |
-| | API Key | Bearer Token（可留空） |
-| 音訊 | 取樣率 / 格式 | 唯讀顯示 |
-| UI | 視窗大小 | 寬 × 高 |
 
-**測試按鈕：** 測試 Qwen3 連線 / 測試 LLM 連線 / 測試 ASR API  
-**儲存：** 寫入 `config.yaml`，同步更新 live `asr_client` 狀態
+**LLM 設定分頁：**
+
+| 群組 | 欄位 | 說明 |
+|------|------|------|
+| 本地伺服器 | 模型 ID | LLM 模型（預設 Qwen3-0.6B） |
+| | 裝置 | cpu / cuda / mps |
+| | 連接埠 | 伺服器埠號（預設 8001） |
+| | 自動啟動 | 啟動 app 時自動啟動 LLM 伺服器 |
+| API 設定 | 提供商 | `fastapi` / `ollama` / `openai` |
+| | Base URL | LLM 伺服器位址 |
+| | API Key | Bearer Token |
+| | 模型 | 模型 ID |
+
+**ASR 設定分頁：**
+
+| 群組 | 欄位 | 說明 |
+|------|------|------|
+| 模式 | 模式選擇 | `local`（本地 venv-asr）/ `api`（遠端 API） |
+| API | API URL | 遠端 ASR 端點 |
+| | API Key | Bearer Token |
+
+**音訊/UI 分頁：**
+
+| 欄位 | 說明 |
+|------|------|
+| 取樣率 | 唯讀顯示 |
+| 格式 | 唯讀顯示 |
+| 視窗大小 | 寬 × 高 |
+| 主題 | dark / light |
+
+**系統資訊分頁：**
+
+| 欄位 | 說明 |
+|------|------|
+| 版本 | 應用程式版本號 |
+| Python | Python 版本 |
+| 平台 | 作業系統 |
+| GPU | CUDA/MPS/CPU 資訊 |
+| 模型狀態 | 各模型下載狀態 |
+| 伺服器健康 | TTS/LLM 伺服器即時 /health 檢查 |
+
+**測試按鈕：** 每個分頁內建「測試連線」按鈕  
+**底部工具列：** 匯出組態 / 匯入組態 / 儲存
 
 ---
 
@@ -293,22 +336,34 @@ api:
   qwen3_timeout: 60
   verify_ssl: true
 
+tts_server:
+  model_id: "Qwen/Qwen3-TTS-0.6B"
+  device: "cpu"
+  port: 8000
+  auto_start: true
+
+llm_server:
+  model_id: "Qwen3-0.6B"
+  device: "cpu"
+  port: 8001
+  auto_start: true
+
 ollama:
   base_url: "http://localhost:11434"
   default_model: "llama3.2:latest"
 
 llm:
-  provider: "ollama"          # "ollama" | "openai" | "fastapi"
-  base_url: "http://localhost:11434"
+  provider: "fastapi"              # "ollama" | "openai" | "fastapi"
+  base_url: "http://localhost:8001"
   api_key: ""
-  model: "llama3.2:latest"
+  model: "Qwen3-0.6B"
 
 audio:
   sample_rate: 22050
   format: "wav"
 
 ui:
-  theme: "light"
+  theme: "dark"
   window_size: [960, 640]
 
 history:
@@ -341,9 +396,9 @@ Qwen3TTS-app/
 │   │   ├── edit_tab.py          # 潤稿翻譯分頁
 │   │   ├── asr_tab.py           # 語音辨識分頁
 │   │   ├── history_tab.py       # 歷史記錄分頁
-│   │   ├── settings_tab.py      # 設定分頁（TTS / LLM / ASR / UI）
+│   │   ├── settings_tab.py      # 設定分頁（TTS / LLM / ASR / 音訊UI / 系統，QTabWidget）
 │   │   ├── waveform_widget.py   # 波形視覺化 Widget
-│   │   └── theme.py             # 深色主題 tokens
+│   │   └── theme.py             # 主題 tokens（dark / light 模式）
 │   ├── api/
 │   │   ├── __init__.py
 │   │   ├── qwen3_client.py      # Qwen3-TTS HTTP 客戶端
@@ -367,7 +422,10 @@ Qwen3TTS-app/
 │       ├── duration_estimator.py # 即時時長預估（v0.3.0）
 │       ├── recent_texts.py      # 最近使用文字佇列（v0.3.0）
 │       ├── i18n.py              # 多語言 UI 字串表（v0.3.0）
-│       └── app_logger.py        # 結構化日誌（v0.3.0）
+│       ├── app_logger.py        # 結構化日誌（v0.3.0）
+│       ├── model_manager.py     # 模型偵測/下載管理（v0.4.0）
+│       ├── server_manager.py    # TTS/LLM 伺服器子程序管理（v0.4.0）
+│       └── text_templates.py    # 文字範本庫（v0.4.0）
 ├── scripts/
 │   ├── asr_worker.py            # ASR subprocess worker（venv-asr 下執行）
 │   ├── tts_server.py            # Qwen3-TTS FastAPI 伺服器（venv-tts 下執行）
@@ -399,7 +457,10 @@ Qwen3TTS-app/
 │   ├── test_duration_estimator.py # 時長預估測試（v0.3.0）
 │   ├── test_recent_texts.py     # 最近文字測試（v0.3.0）
 │   ├── test_i18n.py             # 多語言測試（v0.3.0）
-│   └── test_app_logger.py       # 日誌測試（v0.3.0）
+│   ├── test_app_logger.py       # 日誌測試（v0.3.0）
+│   ├── test_text_templates.py   # 文字範本測試（v0.4.0）
+│   ├── test_model_manager.py    # 模型管理測試（v0.4.0）
+│   └── test_server_manager.py   # 伺服器管理測試（v0.4.0）
 ├── venv/                        # 主 GUI 虛擬環境（git 忽略）
 ├── venv-asr/                    # ASR 虛擬環境（git 忽略）
 ├── venv-tts/                    # TTS 虛擬環境（git 忽略）
@@ -532,6 +593,30 @@ Qwen3TTS-app/
 | 預設本地部署 | 所有 config 預設指向 localhost |
 | Config.from_yaml | 修復空 YAML 檔案 `NoneType` 錯誤 |
 
+### v0.4.0 新增功能
+
+| 功能 | 狀態 | 模組 | 說明 |
+|------|------|------|------|
+| 模型自動安裝 | ✅ | `app/core/model_manager.py` | 啟動時偵測缺失的 0.6B 模型，自動下載（QThread + 進度對話框） |
+| 伺服器自動啟動 | ✅ | `app/core/server_manager.py` | 自動啟動 TTS/LLM 本地 FastAPI 伺服器子程序 |
+| 分頁式設定 | ✅ | `app/ui/settings_tab.py` | QTabWidget 5 分頁：TTS 設定 / LLM 設定 / ASR 設定 / 音訊 UI / 系統資訊 |
+| 本地優先組態 | ✅ | `app/core/config.py` | 新增 TTSServerConfig / LLMServerConfig，LLM 預設指向 localhost:8001 FastAPI |
+| 文字範本庫 | ✅ | `app/core/text_templates.py` | 6 個預設中文範本 + 自訂範本 CRUD + JSON 持久化 |
+| 明亮主題 | ✅ | `app/ui/theme.py` | `apply_theme(app, mode="light")` 明亮模式，可在設定切換 |
+| 健康狀態儀表板 | ✅ | `app/ui/settings_tab.py` | 系統資訊分頁：版本 / Python / GPU / 模型狀態 / 伺服器即時健康檢查 |
+| 伺服器生命週期管理 | ✅ | `app/main.py` | 啟動時 start_all()，關閉時 stop_all()，atexit 保險清理 |
+| 設定匯出/匯入擴充 | ✅ | `app/ui/settings_tab.py` | 匯出/匯入包含 tts_server 和 llm_server 新欄位 |
+| GPU 資訊偵測 | ✅ | `app/core/model_manager.py` | `get_gpu_info()` 偵測 CUDA/MPS/CPU 並回報 VRAM |
+
+### v0.4.0 品質改善
+
+| 項目 | 說明 |
+|------|------|
+| ruff linting | 全部通過 |
+| pytest 測試 | 116 passed, 1 skipped（14 個測試檔） |
+| main.py 錯誤修復 | ServerManager 建構參數改為使用 config 欄位具名傳入 |
+| 組態一致性 | TTSServerConfig / LLMServerConfig 在 from_yaml / to_yaml / settings_tab 均正確處理 |
+
 ---
 
 ## 9. 新增檔案（v0.2.0）
@@ -550,4 +635,15 @@ tests/                         # 測試套件
 ├── test_drafts.py
 ├── test_history.py
 └── test_chinese_converter.py
+```
+
+## 10. 新增檔案（v0.4.0）
+
+```
+app/core/model_manager.py      # 模型偵測/下載管理（ModelInfo, ModelDownloadWorker）
+app/core/server_manager.py     # TTS/LLM 伺服器子程序管理（_ManagedServer, ServerManager）
+app/core/text_templates.py     # 文字範本庫（TextTemplate, TemplateStore）
+tests/test_text_templates.py   # 文字範本測試
+tests/test_model_manager.py    # 模型管理測試
+tests/test_server_manager.py   # 伺服器管理測試
 ```

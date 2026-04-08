@@ -77,13 +77,14 @@ class _StatusDot(QWidget):
 
 
 class MainWindow(QtWidgets.QMainWindow):
-    def __init__(self, config, qwen3_client, llm_client, history_manager, asr_client=None):
+    def __init__(self, config, qwen3_client, llm_client, history_manager, asr_client=None, server_manager=None):
         super().__init__()
         self.config = config
         self.qwen3_client = qwen3_client
         self.llm_client = llm_client
         self.history_manager = history_manager
         self.asr_client = asr_client
+        self.server_manager = server_manager
 
         self._setup_ui()
         self._setup_status_bar()
@@ -231,6 +232,8 @@ class MainWindow(QtWidgets.QMainWindow):
         """Force-quit bypassing tray minimize."""
         if hasattr(self, "_tray"):
             self._tray.hide()
+        if self.server_manager is not None:
+            self.server_manager.stop_all()
         QtWidgets.QApplication.quit()
 
     def _show_shortcuts_dialog(self):
