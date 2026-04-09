@@ -25,6 +25,8 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from pathlib import Path
+
 from ..audio.exporter import AudioExporter
 from ..audio.player import AudioPlayer
 from ..core.drafts import load_drafts, save_drafts
@@ -33,8 +35,11 @@ from ..core.history import HistoryEntry
 from ..core.presets import VoicePreset, load_presets, save_custom_preset
 from ..core.recent_texts import add_recent, load_recent
 from ..core.ssml import SSML_TAGS, strip_ssml
+from ..core.text_templates import TemplateStore
 from .theme import make_secondary_button
 from .waveform_widget import WaveformWidget
+
+_TEMPLATES_PATH = Path(__file__).resolve().parent.parent.parent / "data" / "templates.json"
 
 
 class _FindReplaceDialog(QDialog):
@@ -165,9 +170,11 @@ class TextTab(QWidget):
         self._batch_results: list[tuple[str, bytes]] = []
 
         self._previous_audio: bytes | None = None  # A/B compare: previous result
+        self._template_store = TemplateStore.load(_TEMPLATES_PATH)
         self.setAcceptDrops(True)
         self._setup_ui()
         self._load_presets()
+        self._load_template_categories()
         self._restore_draft()
 
         # Debounced auto-save: save draft 2s after last keystroke
@@ -237,6 +244,51 @@ class TextTab(QWidget):
         input_layout.addLayout(hint_row)
 
         layout.addWidget(input_group)
+
+        # ── Voice Templates ──────────────────────────────────────
+        tpl_group = QGroupBox("語音模版")
+        tpl_group.setToolTip("從50種分類模版快速套用範例文字")
+        tpl_layout = QHBoxLayout(tpl_group)
+        tpl_layout.setContentsMargins(8, 6, 8, 6)
+
+        tpl_layout.addWidget(QLabel("分類："))
+        self.tpl_category_combo = QComboBox()
+        self.tpl_category_combo.setMinimumWidth(110)
+        self.tpl_category_combo.setToolTip("選擇模版分類")
+        self.tpl_category_combo.currentTextChanged.connect(self._on_tpl_category_changed)
+        tpl_layout.addWidget(self.tpl_category_combo)
+
+        tpl_layout.addSpacing(8)
+        tpl_layout.addWidget(QLabel("模版："))
+        self.tpl_name_combo = QComboBox()
+        self.tpl_name_combo.setMinimumWidth(160)
+        self.tpl_name_combo.setToolTip("選擇要套用的語音模版")
+        tpl_layout.addWidget(self.tpl_name_combo)
+
+        apply_tpl_btn = QPushButton("▶ 套用")
+        apply_tpl_btn.setToolTip("將選取的模版文字填入輸入框")
+        apply_tpl_btn.setMaximumWidth(72)
+        apply_tpl_btn.clicked.connect(self._on_apply_template)
+        make_secondary_button(apply_tpl_btn)
+        tpl_layout.addWidget(apply_tpl_btn)
+
+        save_tpl_btn = QPushButton("＋ 存為模版")
+        save_tpl_btn.setToolTip("將目前文字輸入框內容儲存為自訂模版")
+        save_tpl_btn.setMaximumWidth(90)
+        save_tpl_btn.clicked.connect(self._on_save_as_template)
+        make_secondary_button(save_tpl_btn)
+        tpl_layout.addWidget(save_tpl_btn)
+
+        tpl_layout.addStretch()
+
+        self.tpl_preview_label = QLabel("")
+        self.tpl_preview_label.setProperty("muted", "true")
+        self.tpl_preview_label.setWordWrap(False)
+        self.tpl_preview_label.setMaximumWidth(300)
+        self.tpl_name_combo.currentIndexChanged.connect(self._on_tpl_name_changed)
+        tpl_layout.addWidget(self.tpl_preview_label)
+
+        layout.addWidget(tpl_group)
 
         params_group = QGroupBox("合成參數")
         params_layout = QHBoxLayout(params_group)
@@ -496,6 +548,68 @@ class TextTab(QWidget):
             "Qwen3-TTS 支援中文、英文等多語言合成。"
         )
         self.text_input.setPlainText(sample)
+
+    # ── Template methods ──
+
+    def _load_template_categories(self) -> None:
+        """Populate the category combo from the template store."""
+        self.tpl_category_combo.blockSignals(True)
+        self.tpl_category_combo.clear()
+        self.tpl_category_combo.addItem("全部分類")
+        for cat in self._template_store.categories():
+            self.tpl_category_combo.addItem(cat)
+        self.tpl_category_combo.blockSignals(False)
+        self._on_tpl_category_changed(self.tpl_category_combo.currentText())
+
+    def _on_tpl_category_changed(self, category: str) -> None:
+        """Filter template combo by selected category."""
+        self.tpl_name_combo.blockSignals(True)
+        self.tpl_name_combo.clear()
+        for tpl in self._template_store.templates:
+            if category == "全部分類" or tpl.category == category:
+                self.tpl_name_combo.addItem(tpl.name, userData=tpl)
+        self.tpl_name_combo.blockSignals(False)
+        self._on_tpl_name_changed(0)
+
+    def _on_tpl_name_changed(self, _index: int) -> None:
+        """Update preview label when template selection changes."""
+        tpl = self.tpl_name_combo.currentData()
+        if tpl is not None:
+            preview = tpl.text[:60] + ("…" if len(tpl.text) > 60 else "")
+            self.tpl_preview_label.setText(preview)
+        else:
+            self.tpl_preview_label.setText("")
+
+    def _on_apply_template(self) -> None:
+        """Insert selected template text into the text input."""
+        tpl = self.tpl_name_combo.currentData()
+        if tpl is None:
+            return
+        self.text_input.setPlainText(tpl.text)
+        self.text_input.setFocus()
+
+    def _on_save_as_template(self) -> None:
+        """Save current text input content as a custom template."""
+        text = self.text_input.toPlainText().strip()
+        if not text:
+            QMessageBox.warning(self, "警告", "請先在文字輸入框中輸入內容")
+            return
+
+        name, ok = QInputDialog.getText(self, "儲存模版", "請輸入模版名稱：")
+        if not ok or not name.strip():
+            return
+
+        # Ask for category
+        existing_cats = ["自訂"] + self._template_store.categories()
+        cat, ok2 = QInputDialog.getItem(
+            self, "選擇分類", "請選擇或輸入分類：", existing_cats, 0, True
+        )
+        if not ok2:
+            return
+
+        self._template_store.add(name.strip(), text, cat.strip() or "自訂")
+        self._load_template_categories()
+        QMessageBox.information(self, "成功", f"已儲存模版「{name.strip()}」到分類「{cat.strip() or '自訂'}」")
 
     # ── Preset methods ──
 
